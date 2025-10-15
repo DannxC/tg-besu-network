@@ -1,0 +1,21 @@
+node_modules
+.env
+coverage
+coverage.json
+typechain
+typechain-types
+
+# Hardhat files
+cache
+artifacts
+
+# Build
+dist
+build
+
+# ESLint
+.eslintcache
+
+# Editor (opcional - remova se quiser commitar)
+# .vscode/
+
