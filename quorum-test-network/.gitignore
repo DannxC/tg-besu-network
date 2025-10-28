@@ -1,5 +1,7 @@
 # Logs
 logs/
+logs/*
+logs/**/*.log
 *.log
 
 # Docker volumes e dados persistentes
