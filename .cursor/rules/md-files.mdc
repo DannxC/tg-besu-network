@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+NEVER CREATES .MD WITHOUT ASKING THE USER TO.

@@ -1,51 +1,55 @@
-import { network } from "hardhat";
-
-// passe o endereço que sair do deploy
-const ADDRESS = process.env.SIMPLE_STORAGE_ADDR as string;
+import { ethers } from "hardhat";
+import fs from "fs";
+import path from "path";
 
 async function main() {
-  if (!ADDRESS) {
-    throw new Error("❌ Defina SIMPLE_STORAGE_ADDR no ambiente.\nExemplo: export SIMPLE_STORAGE_ADDR=0x...");
-  }
-
   console.log("🔌 Conectando à rede Besu...");
-  const connection = await network.connect();
-  console.log(`✅ Conectado à rede: ${connection.networkName}`);
-  
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { ethers } = connection as any;
-  console.log("📦 Plugin ethers carregado:", !!ethers);
   
   const [signer] = await ethers.getSigners();
-  const signerAddress = await signer.getAddress();
-  console.log("👤 Signer:", signerAddress);
-  console.log("📄 Contract:", ADDRESS);
+  const network = await ethers.provider.getNetwork();
   
-  const abi = [
-    "function get() view returns (uint256)",
-    "function set(uint256 x)"
-  ];
-  const contract = new ethers.Contract(ADDRESS, abi, signer);
+  console.log("✅ Conectado à rede:", network.name || `chainId ${network.chainId}`);
+  console.log("👤 Signer:", signer.address);
+  
+  // Carregar endereço do contrato deployado
+  const deploymentFile = path.join(__dirname, "..", "deployments", "SimpleStorage.json");
+  
+  if (!fs.existsSync(deploymentFile)) {
+    throw new Error("❌ Contrato não encontrado!\n  Execute 'npm run deploy' primeiro.");
+  }
+  
+  const deployment = JSON.parse(fs.readFileSync(deploymentFile, "utf-8"));
+  const contractAddress = deployment.address;
+  
+  console.log("📄 Contract:", contractAddress);
+  console.log("   Deployed by:", deployment.deployer);
+  console.log("   Deployed at:", new Date(deployment.timestamp).toLocaleString());
+  
+  const SimpleStorage = await ethers.getContractAt("SimpleStorage", contractAddress);
 
   console.log("\n📖 Lendo valor atual...");
-  const before = await contract.get();
+  const before = await SimpleStorage.get();
   console.log("  storedData:", before.toString());
 
   console.log("\n✍️  Alterando valor para 123...");
-  const tx = await contract.set(123n, { gasPrice: 0n });
+  const tx = await SimpleStorage.set(123);
   console.log("  Tx hash:", tx.hash);
   console.log("⏳ Aguardando confirmação...");
-  await tx.wait();
+  const receipt = await tx.wait();
   console.log("✅ Transação confirmada!");
+  console.log("  Block:", receipt.blockNumber);
+  console.log("  Gas usado:", receipt.gasUsed.toString());
 
   console.log("\n📖 Lendo novo valor...");
-  const after = await contract.get();
+  const after = await SimpleStorage.get();
   console.log("  storedData:", after.toString());
   
   console.log("\n✨ Interação concluída com sucesso!");
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

@@ -1,8 +1,6 @@
-import * as dotenv from "dotenv";
-dotenv.config();
-
-import type { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-ethers";
+import "dotenv/config";
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomiclabs/hardhat-ethers";
 
 const { RPC_URL, CHAIN_ID, MEMBER1_PK } = process.env;
 
@@ -13,11 +11,8 @@ const config: HardhatUserConfig = {
   },
   networks: {
     besu: {
-      type: "http" as const,
       url: RPC_URL || "http://127.0.0.1:8545",
       chainId: CHAIN_ID ? parseInt(CHAIN_ID) : 1337,
-      // Em Besu dev normalmente gasPrice=0. Se der "underpriced", mude para 1 gwei (1000000000).
-      gasPrice: 0,
       accounts: MEMBER1_PK ? [MEMBER1_PK] : []
     }
   }

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    "module": "commonjs",
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
@@ -13,5 +13,5 @@
     "noEmit": true
   },
   "include": ["scripts/**/*", "contracts/**/*", "utils/**/*", "tests/**/*", "hardhat.config.ts", "hardhat-env.d.ts"],
-  "exclude": ["node_modules", "artifacts", "cache", "eslint.config.ts", "utils/test-network.ts"]
+  "exclude": ["node_modules/**/*", "artifacts", "cache", "eslint.config.ts", "utils/test-network.ts"]
 }
