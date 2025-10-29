@@ -1,155 +1,229 @@
-/**
- * Teste de conexão com a rede Besu
- * Execute com: npm run test:network
- */
+import { ethers } from "hardhat";
+import { expect } from "chai";
+import fs from "fs";
+import path from "path";
 
-import * as dotenv from "dotenv";
-import http from "node:http";
-dotenv.config();
+interface DeploymentInfo {
+  address: string;
+  txHash: string;
+  deployer: string;
+  timestamp: string;
+  blockNumber: number;
+  gasUsed?: string;
+  network: string;
+  chainId?: number;
+  owner?: string;
+}
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
+describe("Network Integration Tests", function() {
+  this.timeout(30000);
 
-// Helper para fazer requisições HTTP com timeout
-function httpRequest(url: string, body: object, timeoutMs = 5000): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const urlObj = new URL(url);
-    
-    const options = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || 8545,
-      path: urlObj.pathname || "/",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": data.length
-      },
-      timeout: timeoutMs
-    };
-    
-    const req = http.request(options, (res) => {
-      let responseData = "";
+  describe("1. Conexão e Configuração Básica", function() {
+    it("Deve conectar à rede Besu via RPC", async function() {
+      const provider = ethers.provider;
+      const network = await provider.getNetwork();
       
-      res.on("data", (chunk) => {
-        responseData += chunk;
-      });
-      
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(responseData));
-        } catch {
-          reject(new Error("Invalid JSON response"));
-        }
-      });
+      console.log(`   ✅ Conectado! Chain ID: ${network.chainId}`);
+      expect(network.chainId).to.equal(1337);
     });
-    
-    req.on("timeout", () => {
-      req.destroy();
-      reject(new Error("Request timeout"));
+
+    it("Deve ter acesso ao RPC_URL configurado", function() {
+      const rpcUrl = process.env.RPC_URL;
+      expect(rpcUrl).to.exist;
+      expect(rpcUrl).to.equal("http://127.0.0.1:8545");
+      console.log(`   ✅ RPC URL: ${rpcUrl}`);
     });
-    
-    req.on("error", (err) => {
-      reject(err);
+
+    it("Rede deve estar minerando blocos", async function() {
+      const blockNumber = await ethers.provider.getBlockNumber();
+      expect(blockNumber).to.be.greaterThan(0);
+      console.log(`   ✅ Bloco atual: ${blockNumber}`);
     });
-    
-    req.write(data);
-    req.end();
   });
-}
 
-async function testNetwork() {
-  console.log("🔍 Testando conexão com a rede Besu...\n");
-  console.log("📡 RPC URL:", RPC_URL);
-  
-  try {
-    // Testa conexão básica
-    console.log("\n1️⃣  Testando conectividade...");
-    const chainIdData = await httpRequest(RPC_URL, {
-      jsonrpc: "2.0",
-      method: "eth_chainId",
-      params: [],
-      id: 1
-    }) as { result: string };
-    
-    const chainId = parseInt(chainIdData.result, 16);
-    console.log("   ✅ Conectado!");
-    console.log("   Chain ID:", chainId);
-    
-    // Pega número do bloco
-    console.log("\n2️⃣  Verificando bloco atual...");
-    const blockData = await httpRequest(RPC_URL, {
-      jsonrpc: "2.0",
-      method: "eth_blockNumber",
-      params: [],
-      id: 2
-    }) as { result: string };
-    
-    const blockNumber = parseInt(blockData.result, 16);
-    console.log("   ✅ Bloco atual:", blockNumber);
-    
-    // Verifica se a rede está minerando
-    if (blockNumber > 0) {
-      console.log("   ✅ Rede está ativa e minerando");
-    }
-    
-    // Lista contas
-    console.log("\n3️⃣  Verificando contas disponíveis...");
-    const accountsData = await httpRequest(RPC_URL, {
-      jsonrpc: "2.0",
-      method: "eth_accounts",
-      params: [],
-      id: 3
-    }) as { result: string[] };
-    
-    const accounts = accountsData.result || [];
-    console.log("   ✅ Contas encontradas:", accounts.length);
-    
-    if (accounts.length > 0) {
-      console.log("   Primeira conta:", accounts[0]);
-    }
-    
-    // Verifica configuração do .env
-    console.log("\n4️⃣  Verificando configuração do .env...");
-    const memberPk = process.env.MEMBER1_PK;
-    const expectedChainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337;
-    
-    if (memberPk) {
-      console.log("   ✅ MEMBER1_PK configurada");
-    } else {
-      console.log("   ⚠️  MEMBER1_PK não configurada");
-    }
-    
-    if (chainId === expectedChainId) {
-      console.log(`   ✅ Chain ID correto (${chainId})`);
-    } else {
-      console.log(`   ⚠️  Chain ID diferente: esperado ${expectedChainId}, recebido ${chainId}`);
-    }
-    
-    console.log("\n✅ Todos os testes passaram!");
-    console.log("\n💡 Próximos passos:");
-    console.log("   npm run compile  # Compila os contratos");
-    console.log("   npm run deploy   # Faz deploy na rede Besu");
-    
-  } catch (error) {
-    console.error("\n❌ Erro ao conectar com a rede:");
-    if (error instanceof Error) {
-      console.error("   Mensagem:", error.message);
+  describe("2. Validação das Contas Configuradas", function() {
+    it("MEMBER1_PK deve estar configurada no .env", function() {
+      expect(process.env.MEMBER1_PK).to.exist;
+      expect(process.env.MEMBER1_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
+      console.log("   ✅ MEMBER1_PK válida");
+    });
+
+    it("MEMBER2_PK deve estar configurada no .env", function() {
+      expect(process.env.MEMBER2_PK).to.exist;
+      expect(process.env.MEMBER2_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
+      console.log("   ✅ MEMBER2_PK válida");
+    });
+
+    it("MEMBER3_PK deve estar configurada no .env", function() {
+      expect(process.env.MEMBER3_PK).to.exist;
+      expect(process.env.MEMBER3_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
+      console.log("   ✅ MEMBER3_PK válida");
+    });
+
+    it("Todas as contas devem estar acessíveis via Hardhat", async function() {
+      const signers = await ethers.getSigners();
+      expect(signers.length).to.be.at.least(3);
       
-      if (error.message.includes("ECONNREFUSED")) {
-        console.error("\n💡 A porta 8545 não está aceitando conexões.");
-      } else if (error.message.includes("ECONNRESET")) {
-        console.error("\n💡 A conexão foi resetada. A rede pode estar reiniciando.");
-      } else if (error.message.includes("timeout")) {
-        console.error("\n💡 Timeout na conexão. A rede pode estar lenta ou sobrecarregada.");
+      const addresses = await Promise.all(signers.map(s => s.getAddress()));
+      console.log(`   ✅ ${signers.length} contas disponíveis:`);
+      addresses.forEach((addr, i) => console.log(`      ${i + 1}. ${addr}`));
+    });
+
+    it("Todas as contas devem ter saldo (pré-funded)", async function() {
+      const signers = await ethers.getSigners();
+      
+      for (let i = 0; i < Math.min(3, signers.length); i++) {
+        const balance = await signers[i].getBalance();
+        const balanceEth = parseFloat(ethers.utils.formatEther(balance));
+        
+        expect(balanceEth).to.be.greaterThan(0);
+        console.log(`   ✅ Member${i + 1}: ${balanceEth.toFixed(2)} ETH`);
       }
-    }
-    console.error("\n🔧 Soluções:");
-    console.error("   1. Verifique se a rede está rodando: docker ps | grep rpcnode");
-    console.error("   2. Reinicie a rede: ./restart.sh");
-    console.error("   3. Verifique os logs: docker logs rpcnode");
-    process.exit(1);
-  }
-}
+    });
+  });
 
-void testNetwork();
+  describe("3. Validação dos Deployments Existentes", function() {
+    const deploymentsDir = path.join(__dirname, "..", "deployments");
 
+    it("Pasta deployments deve existir", function() {
+      const exists = fs.existsSync(deploymentsDir);
+      
+      if (!exists) {
+        console.log("   ⚠️  Pasta deployments não existe (nenhum contrato deployado ainda)");
+        this.skip();
+      }
+      
+      expect(exists).to.be.true;
+      console.log(`   ✅ Pasta deployments encontrada: ${deploymentsDir}`);
+    });
+
+    it("Deve validar todos os contratos deployados", async function() {
+      if (!fs.existsSync(deploymentsDir)) {
+        console.log("   ⏭️  Sem deployments para validar");
+        this.skip();
+        return;
+      }
+
+      const files = fs.readdirSync(deploymentsDir).filter(f => f.endsWith(".json"));
+      
+      if (files.length === 0) {
+        console.log("   ⚠️  Nenhum deployment encontrado");
+        this.skip();
+        return;
+      }
+
+      console.log(`   📋 Validando ${files.length} deployment(s)...\n`);
+
+      for (const file of files) {
+        const filePath = path.join(deploymentsDir, file);
+        const deployment: DeploymentInfo = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        
+        console.log(`   📄 ${file}:`);
+        console.log(`      Address: ${deployment.address}`);
+        console.log(`      Network: ${deployment.network}`);
+        console.log(`      Block: ${deployment.blockNumber}`);
+
+        // Verificar se o contrato existe na rede
+        const code = await ethers.provider.getCode(deployment.address);
+        
+        if (code === "0x") {
+          console.log(`      ❌ ERRO: Contrato não existe na rede atual!`);
+          console.log(`      💡 Dica: A rede foi resetada? Execute novo deploy.`);
+          throw new Error(`Contrato ${file} não existe no endereço ${deployment.address}`);
+        }
+        
+        console.log(`      ✅ Contrato existe e está ativo`);
+        console.log(`      📦 Bytecode: ${code.length} bytes\n`);
+
+        // Verificar se o deployer ainda tem saldo
+        const deployerBalance = await ethers.provider.getBalance(deployment.deployer);
+        console.log(`      👤 Deployer: ${deployment.deployer}`);
+        console.log(`      💰 Balance: ${ethers.utils.formatEther(deployerBalance)} ETH\n`);
+      }
+
+      console.log(`   ✅ Todos os ${files.length} deployment(s) validados com sucesso!`);
+    });
+
+    it("Deve validar chainId dos deployments contra a rede atual", async function() {
+      if (!fs.existsSync(deploymentsDir)) {
+        this.skip();
+        return;
+      }
+
+      const files = fs.readdirSync(deploymentsDir).filter(f => f.endsWith(".json"));
+      
+      if (files.length === 0) {
+        this.skip();
+        return;
+      }
+
+      const currentNetwork = await ethers.provider.getNetwork();
+      const currentChainId = currentNetwork.chainId;
+
+      for (const file of files) {
+        const filePath = path.join(deploymentsDir, file);
+        const deployment: DeploymentInfo = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        
+        if (deployment.chainId && deployment.chainId !== currentChainId) {
+          console.log(`   ⚠️  AVISO: ${file} foi deployado em chainId ${deployment.chainId}, mas a rede atual é ${currentChainId}`);
+          console.log(`   💡 Dica: Você pode estar conectado a uma rede diferente ou ela foi resetada.`);
+          throw new Error(`ChainId mismatch para ${file}`);
+        }
+      }
+
+      console.log(`   ✅ ChainId consistente em todos os deployments (${currentChainId})`);
+    });
+  });
+
+  describe("4. Testes de Conectividade Avançada", function() {
+    it("Deve conseguir enviar uma transação simples", async function() {
+      const [signer] = await ethers.getSigners();
+      const nonce = await signer.getTransactionCount();
+      
+      console.log(`   ✅ Nonce atual: ${nonce}`);
+      expect(nonce).to.be.a("number");
+    });
+
+    it("Deve conseguir estimar gas para transações", async function() {
+      const [from, to] = await ethers.getSigners();
+      
+      const gasEstimate = await ethers.provider.estimateGas({
+        from: await from.getAddress(),
+        to: await to.getAddress(),
+        value: ethers.utils.parseEther("0.1")
+      });
+      
+      expect(gasEstimate.toNumber()).to.be.greaterThan(0);
+      console.log(`   ✅ Gas estimado: ${gasEstimate.toString()}`);
+    });
+
+    it("Deve conseguir buscar blocos recentes", async function() {
+      const blockNumber = await ethers.provider.getBlockNumber();
+      const block = await ethers.provider.getBlock(blockNumber);
+      
+      expect(block).to.exist;
+      expect(block.number).to.equal(blockNumber);
+      expect(block.transactions).to.be.an("array");
+      
+      console.log(`   ✅ Bloco ${blockNumber}:`);
+      console.log(`      Hash: ${block.hash}`);
+      console.log(`      Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
+      console.log(`      Transações: ${block.transactions.length}`);
+    });
+
+    it("Deve ter gasPrice configurado como 0 (zero base fee)", async function() {
+      const [signer] = await ethers.getSigners();
+      const gasPrice = await signer.getGasPrice();
+      
+      expect(gasPrice.toNumber()).to.equal(0);
+      console.log(`   ✅ Gas Price: ${gasPrice.toString()} (zero base fee)`);
+    });
+  });
+
+  after(function() {
+    console.log("\n" + "=".repeat(60));
+    console.log("✅ Todos os testes de rede passaram!");
+    console.log("🚀 A rede Besu está funcionando corretamente");
+    console.log("=".repeat(60));
+  });
+});

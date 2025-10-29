@@ -8,7 +8,8 @@
     "deploy": "hardhat run scripts/deploy.ts --network besu",
     "interact": "hardhat run scripts/interact.ts --network besu",
     "test": "hardhat test",
-    "test:network": "ts-node tests/network.test.ts",
+    "test:dss": "hardhat test tests/dss-storage.test.ts --network besu",
+    "test:network": "hardhat test tests/network.test.ts --network besu",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "clean": "hardhat clean"
@@ -21,6 +22,7 @@
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@types/chai": "^5.2.2",
     "@types/eslint__js": "^8.42.3",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.7.2",
     "chai": "^6.2.0",
     "dotenv": "^17.2.3",
