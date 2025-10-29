@@ -84,6 +84,19 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       // Adicionar de volta para os próximos testes
       await dssStorage.allowUser(user1Address);
     });
+
+    it("Owner NÃO deve poder remover a si mesmo de allowedUsers", async function() {
+      let reverted = false;
+      try {
+        const tx = await dssStorage.disallowUser(ownerAddress);
+        await tx.wait();
+      } catch (error) {
+        const err = error as Error;
+        reverted = err.message.includes("Owner cannot be removed") || 
+                   err.message.includes("revert");
+      }
+      expect(reverted).to.be.true;
+    });
   });
 
   describe("3. CRUD - Adicionar Dados (Upsert)", function() {
@@ -200,25 +213,29 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(updatedEvents?.length).to.be.greaterThan(0);
     });
 
-    // FIXME: Bug no contrato - updateChunkData verifica _chunkData.addedBy (novo) ao invés do antigo
-    it.skip("User1 não deve poder atualizar dados do owner (BUG NO CONTRATO)", async function() {
-      let reverted = false;
-      try {
-        const tx = await dssStorage.connect(user1).upsertOIR(
-          ["u4pruydqqvj"],
-          100, 500,
-          Math.floor(Date.now() / 1000),
-          Math.floor(Date.now() / 1000) + 3600,
-          "https://example.com/hack-attempt",
-          1, 1001
-        );
-        await tx.wait();
-      } catch (error) {
-        const err = error as Error;
-        reverted = err.message.includes("Not the owner of this data") || 
-                   err.message.includes("revert");
-      }
-      expect(reverted).to.be.true;
+    it("User1 PODE atualizar dados do owner (qualquer allowedUser pode modificar qualquer OIR)", async function() {
+      const updatedUrl = "https://example.com/user1-modified-owners-data";
+      
+      const tx = await dssStorage.connect(user1).upsertOIR(
+        ["u4pruydqqvj"],
+        100, 500,
+        Math.floor(Date.now() / 1000),
+        Math.floor(Date.now() / 1000) + 3600,
+        updatedUrl,
+        1, 1001
+      );
+      await tx.wait();
+      
+      // Verificar que foi atualizado
+      const result = await dssStorage.getOIRsByGeohash(
+        "u4pruydqqvj",
+        100,
+        500,
+        Math.floor(Date.now() / 1000) - 100,
+        Math.floor(Date.now() / 1000) + 3700
+      );
+      
+      expect(result.urls[0]).to.equal(updatedUrl);
     });
   });
 
@@ -284,18 +301,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(result.ids).to.not.include(deleteTestData.id);
     });
 
-    // FIXME: Bug no contrato - deleteChunkData verifica addedBy mas o check não funciona corretamente
-    it.skip("User1 não deve poder deletar dados do owner (BUG NO CONTRATO)", async function() {
-      let reverted = false;
-      try {
-        const tx = await dssStorage.connect(user1).deleteOIR([1001]);
-        await tx.wait();
-      } catch (error) {
-        const err = error as Error;
-        reverted = err.message.includes("Not the owner of this data") || 
-                   err.message.includes("revert");
-      }
-      expect(reverted).to.be.true;
+    it("Deletar ID inexistente não deve reverter (silenciosamente ignora)", async function() {
+      // ID 99999 não existe, então idToGeohash[99999].length == 0
+      // O loop em deleteOIR simplesmente não executa nenhuma iteração
+      const tx = await dssStorage.deleteOIR([99999]);
+      await tx.wait();
+      
+      // Se chegou aqui, não reverteu (comportamento esperado)
+      expect(true).to.be.true;
     });
   });
 
@@ -485,6 +498,36 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       const restoredOwner = await dssStorage.owner();
       expect(restoredOwner).to.equal(ownerAddress);
     });
+
+    it("Deve rejeitar transferência para address(0)", async function() {
+      let reverted = false;
+      try {
+        const tx = await dssStorage.changeOwner("0x0000000000000000000000000000000000000000");
+        await tx.wait();
+      } catch (error) {
+        const err = error as Error;
+        reverted = err.message.includes("New owner cannot be zero address") || 
+                   err.message.includes("revert");
+      }
+      expect(reverted).to.be.true;
+    });
+
+    it("Deve rejeitar transferência para usuário que não está allowed", async function() {
+      // User2 ainda não foi adicionado aos allowedUsers neste ponto
+      const isUser2Allowed = await dssStorage.allowedUsers(user2Address);
+      expect(isUser2Allowed).to.be.false;
+
+      let reverted = false;
+      try {
+        const tx = await dssStorage.changeOwner(user2Address);
+        await tx.wait();
+      } catch (error) {
+        const err = error as Error;
+        reverted = err.message.includes("New owner must be allowed already") || 
+                   err.message.includes("revert");
+      }
+      expect(reverted).to.be.true;
+    });
   });
 
   // TESTE DE CONCORRÊNCIA - Diferentes usuários em paralelo
@@ -660,14 +703,12 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(result.urls[0]).to.equal("https://example.com/reused-id");
     });
 
-    it("Deve falhar silenciosamente ao deletar ID inexistente (idToGeohash vazio)", async function() {
-      // ID 99999 não existe, então idToGeohash[99999].length == 0
-      // O loop em deleteOIR simplesmente não executa nenhuma iteração
-      // Isso é um comportamento aceitável (não reverte, apenas não faz nada)
+    it("Deletar ID inexistente não reverte (comportamento silencioso)", async function() {
+      // ID inexistente simplesmente não faz nada
       const tx = await dssStorage.deleteOIR([99999]);
       await tx.wait();
       
-      // Se chegou aqui, não reverteu (comportamento atual do contrato)
+      // Se chegou aqui, não reverteu (comportamento esperado)
       expect(true).to.be.true;
     });
   });
@@ -774,60 +815,56 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
   });
 
-  describe("13. Ownership Avançado", function() {
+  describe("13. Colaboração Multi-Usuário (Novo Comportamento)", function() {
     before(async function() {
       // User1 cria uma OIR
       const now = Math.floor(Date.now() / 1000);
       const tx = await dssStorage.connect(user1).upsertOIR(
-        ["u4ownership"],
+        ["u4collab"],
         100, 500,
         now, now + 3600,
-        "https://example.com/user1-owned",
+        "https://example.com/user1-created",
         90, 60001
       );
       await tx.wait();
       console.log("   ✅ User1 criou OIR 60001");
     });
 
-    it("Owner NÃO deve poder modificar OIR de User1", async function() {
-      let reverted = false;
-      try {
-        const now = Math.floor(Date.now() / 1000);
-        const tx = await dssStorage.upsertOIR(
-          ["u4ownership"],
-          100, 500,
-          now, now + 3600,
-          "https://example.com/owner-hack-attempt",
-          90, 60001
-        );
-        await tx.wait();
-      } catch (error) {
-        const err = error as Error;
-        reverted = err.message.includes("Not the owner of this OIR") || 
-                   err.message.includes("revert");
-      }
-      expect(reverted).to.be.true;
+    it("Owner PODE modificar OIR criada por User1 (qualquer allowedUser pode modificar)", async function() {
+      const now = Math.floor(Date.now() / 1000);
+      const tx = await dssStorage.upsertOIR(
+        ["u4collab"],
+        150, 550,
+        now, now + 3600,
+        "https://example.com/owner-modified",
+        90, 60001
+      );
+      await tx.wait();
+      
+      const result = await dssStorage.getOIRsByGeohash("u4collab", 0, 10000, 0, 999999999999);
+      expect(result.urls[0]).to.equal("https://example.com/owner-modified");
     });
 
-    it("Owner NÃO deve poder deletar OIR de User1", async function() {
-      let reverted = false;
-      try {
-        const tx = await dssStorage.deleteOIR([60001]);
-        await tx.wait();
-      } catch (error) {
-        const err = error as Error;
-        reverted = err.message.includes("Not the owner of this data") || 
-                   err.message.includes("revert");
-      }
-      expect(reverted).to.be.true;
+    it("User2 PODE modificar OIR criada por User1 (colaboração completa)", async function() {
+      const now = Math.floor(Date.now() / 1000);
+      const tx = await dssStorage.connect(user2).upsertOIR(
+        ["u4collab"],
+        200, 600,
+        now, now + 3600,
+        "https://example.com/user2-modified",
+        90, 60001
+      );
+      await tx.wait();
+      
+      const result = await dssStorage.getOIRsByGeohash("u4collab", 0, 10000, 0, 999999999999);
+      expect(result.urls[0]).to.equal("https://example.com/user2-modified");
     });
 
-    it("User1 deve poder deletar sua própria OIR (enquanto ainda está allowed)", async function() {
-      // User1 deleta sua OIR ANTES de ser removido de allowedUsers
-      const tx = await dssStorage.connect(user1).deleteOIR([60001]);
+    it("Owner PODE deletar OIR criada por User1 (qualquer allowedUser pode deletar)", async function() {
+      const tx = await dssStorage.deleteOIR([60001]);
       await tx.wait();
 
-      const result = await dssStorage.getOIRsByGeohash("u4ownership", 0, 10000, 0, 999999999999);
+      const result = await dssStorage.getOIRsByGeohash("u4collab", 0, 10000, 0, 999999999999);
       expect(result.ids.length).to.equal(0);
     });
 
@@ -858,7 +895,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       await dssStorage.allowUser(user1Address);
     });
 
-    it("Novo contract owner NÃO deve poder modificar OIRs antigas", async function() {
+    it("Novo contract owner PODE modificar qualquer OIR (mesmo as antigas)", async function() {
       // Owner cria uma OIR
       const now = Math.floor(Date.now() / 1000);
       const txCreate = await dssStorage.upsertOIR(
@@ -874,23 +911,18 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       const txTransfer = await dssStorage.changeOwner(user1Address);
       await txTransfer.wait();
 
-      // Novo owner (User1) tenta modificar OIR do owner antigo
-      let reverted = false;
-      try {
-        const tx = await dssStorage.connect(user1).upsertOIR(
-          ["u4oldowner"],
-          100, 500,
-          now, now + 3600,
-          "https://example.com/new-owner-hack",
-          92, 70001
-        );
-        await tx.wait();
-      } catch (error) {
-        const err = error as Error;
-        reverted = err.message.includes("Not the owner of this OIR") || 
-                   err.message.includes("revert");
-      }
-      expect(reverted).to.be.true;
+      // Novo owner (User1) modifica OIR do owner antigo (permitido!)
+      const tx = await dssStorage.connect(user1).upsertOIR(
+        ["u4oldowner"],
+        150, 550,
+        now, now + 3600,
+        "https://example.com/new-owner-modified",
+        92, 70001
+      );
+      await tx.wait();
+      
+      const result = await dssStorage.getOIRsByGeohash("u4oldowner", 0, 10000, 0, 999999999999);
+      expect(result.urls[0]).to.equal("https://example.com/new-owner-modified");
 
       // Restaurar ownership original
       const txRestore = await dssStorage.connect(user1).changeOwner(ownerAddress);
@@ -899,7 +931,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
   });
 
   describe("14. Eventos e Auditoria", function() {
-    it("DataAdded deve emitir com parâmetros corretos", async function() {
+    it("DataAdded deve emitir com parâmetros corretos (createdBy)", async function() {
       const now = Math.floor(Date.now() / 1000);
       const tx = await dssStorage.upsertOIR(
         ["u4event001"],
@@ -916,7 +948,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       const event = events?.[0];
       expect(event?.args?.id.toNumber()).to.equal(80001);
       expect(event?.args?.geohash).to.equal("u4event001");
-      expect(event?.args?.addedBy).to.equal(ownerAddress);
+      // Evento usa o 3º parâmetro (createdBy no contrato)
+      expect(event?.args?.[2]).to.equal(ownerAddress);
     });
 
     it("DataUpdated deve emitir ao atualizar OIR existente", async function() {
@@ -1141,6 +1174,101 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
   });
 
+  describe("17. Auditoria - createdBy e lastUpdatedBy", function() {
+    it("Deve registrar createdBy ao criar nova OIR", async function() {
+      const now = Math.floor(Date.now() / 1000);
+      const tx = await dssStorage.connect(user1).upsertOIR(
+        ["u4audit001"],
+        100, 500,
+        now, now + 3600,
+        "https://example.com/audit-test",
+        200, 96001
+      );
+      await tx.wait();
+
+      const oirData = await dssStorage.idToData(96001);
+      expect(oirData.createdBy).to.equal(user1Address);
+      expect(oirData.lastUpdatedBy).to.equal(user1Address);
+    });
+
+    it("Deve preservar createdBy e atualizar lastUpdatedBy em updates", async function() {
+      // Owner modifica OIR criada por User1
+      const now = Math.floor(Date.now() / 1000);
+      const tx = await dssStorage.upsertOIR(
+        ["u4audit001"],
+        150, 550,
+        now, now + 3600,
+        "https://example.com/audit-updated",
+        200, 96001
+      );
+      await tx.wait();
+
+      const oirData = await dssStorage.idToData(96001);
+      expect(oirData.createdBy).to.equal(user1Address); // Deve permanecer User1
+      expect(oirData.lastUpdatedBy).to.equal(ownerAddress); // Deve ser Owner agora
+    });
+
+    it("Deve atualizar lastUpdatedBy para cada usuário que modifica", async function() {
+      const now = Math.floor(Date.now() / 1000);
+
+      // User2 modifica
+      const tx1 = await dssStorage.connect(user2).upsertOIR(
+        ["u4audit001"],
+        200, 600,
+        now, now + 3600,
+        "https://example.com/audit-user2",
+        200, 96001
+      );
+      await tx1.wait();
+
+      let oirData = await dssStorage.idToData(96001);
+      expect(oirData.createdBy).to.equal(user1Address); // Ainda User1
+      expect(oirData.lastUpdatedBy).to.equal(user2Address); // Agora User2
+
+      // User1 (criador) modifica novamente
+      const tx2 = await dssStorage.connect(user1).upsertOIR(
+        ["u4audit001"],
+        250, 650,
+        now, now + 3600,
+        "https://example.com/audit-user1-again",
+        200, 96001
+      );
+      await tx2.wait();
+
+      oirData = await dssStorage.idToData(96001);
+      expect(oirData.createdBy).to.equal(user1Address); // Ainda User1
+      expect(oirData.lastUpdatedBy).to.equal(user1Address); // Volta para User1
+    });
+
+    it("Deve manter createdBy mesmo após múltiplas modificações de geohashes", async function() {
+      const now = Math.floor(Date.now() / 1000);
+
+      // Owner modifica adicionando novos geohashes
+      const tx1 = await dssStorage.upsertOIR(
+        ["u4audit001", "u4audit002", "u4audit003"],
+        100, 500,
+        now, now + 3600,
+        "https://example.com/expanded",
+        200, 96001
+      );
+      await tx1.wait();
+
+      // User2 modifica removendo geohashes
+      const tx2 = await dssStorage.connect(user2).upsertOIR(
+        ["u4audit003"],
+        100, 500,
+        now, now + 3600,
+        "https://example.com/reduced",
+        200, 96001
+      );
+      await tx2.wait();
+
+      const oirData = await dssStorage.idToData(96001);
+      expect(oirData.createdBy).to.equal(user1Address); // Sempre User1 (criador original)
+      expect(oirData.lastUpdatedBy).to.equal(user2Address); // User2 (última modificação)
+    });
+  });
+
   after(function() {
     console.log("\n============================================================");
     console.log("✅ TODOS OS TESTES CONCLUÍDOS COM SUCESSO!");
@@ -1155,7 +1283,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     console.log("  ✅ Edge cases de upsert com mudança de geohashes");
     console.log("  ✅ Delete e cleanup completo");
     console.log("  ✅ Queries com múltiplas OIRs");
-    console.log("  ✅ Ownership avançado (multi-usuário)");
+    console.log("  ✅ Colaboração multi-usuário (novo modelo)");
+    console.log("  ✅ Auditoria com createdBy/lastUpdatedBy");
     console.log("  ✅ Eventos e auditoria");
     console.log("  ✅ Validações de input e limites");
     console.log("  ✅ State consistency (ciclo completo)");

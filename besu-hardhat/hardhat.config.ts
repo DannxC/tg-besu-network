@@ -10,7 +10,10 @@ const accounts = [MEMBER1_PK, MEMBER2_PK, MEMBER3_PK].filter((pk): pk is string 
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.20",
-    settings: { optimizer: { enabled: true, runs: 200 } }
+    settings: { 
+      optimizer: { enabled: true, runs: 200 },
+      viaIR: true
+    }
   },
   networks: {
     besu: {

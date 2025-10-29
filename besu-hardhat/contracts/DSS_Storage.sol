@@ -11,11 +11,11 @@ contract DSS_Storage {
     
     /* EVENTS */
 
-    /// @dev Emitted when a new data chunk is added.
-    event DataAdded(uint indexed id, string geohash, address indexed addedBy);
+    /// @dev Emitted when a new data chunk is added to a geohash.
+    event DataAdded(uint indexed id, string geohash, address indexed createdBy);
     /// @dev Emitted when existing data chunk is updated.
     event DataUpdated(uint indexed id, string geohash, address indexed updatedBy);
-    /// @dev Emitted when a data chunk is deleted.
+    /// @dev Emitted when a data chunk is deleted from a geohash.
     event DataDeleted(uint indexed id, string geohash, address indexed deletedBy);
 
 
@@ -43,7 +43,8 @@ contract DSS_Storage {
     /// @dev Represents the core data of an Operational Intent Reference (OIR).
     /// Note: The complete OIR includes this data + geohashes stored in idToGeohash mapping.
     struct OIRData {
-        address addedBy; // Address of the user who added the OIR.
+        address createdBy; // Address of the user who originally created the OIR.
+        address lastUpdatedBy; // Address of the user who last modified the OIR (geohashes or metadata).
         HeightInterval height;
         TimeInterval time;
         ResourceInfo resourceInfo;
@@ -78,13 +79,6 @@ contract DSS_Storage {
         _;
     }
 
-    /// @dev Ensures that only the creator/owner of a specific OIR can modify it.
-    /// @param _id The ID of the OIR to check ownership for.
-    modifier onlyOIROwner(uint _id) {
-        require(idToData[_id].addedBy == msg.sender, "Not the owner of this OIR");
-        _;
-    }
-
 
     /* FUNCTIONS */
 
@@ -109,20 +103,27 @@ contract DSS_Storage {
 
     /**
      * @dev Revokes a user's permission to interact with OIRs.
+     * The owner cannot be removed from allowedUsers to ensure contract manageability.
      * @param _user The address to revoke permissions from.
      * @custom:modifier onlyOwner Only the contract owner can call this function.
+     * @custom:throws "Owner cannot be removed" if attempting to remove the owner.
      */
     function disallowUser(address _user) public onlyOwner {
+        require(_user != owner, "Owner cannot be removed");
         allowedUsers[_user] = false;
     }
 
     /**
      * @dev Transfers contract ownership to a new address.
-     * The new owner will have full control over user permissions.
+     * The new owner must already be in the allowedUsers list and cannot be address(0).
      * @param _newOwner The address of the new owner.
      * @custom:modifier onlyOwner Only the current owner can transfer ownership.
+     * @custom:throws "New owner cannot be zero address" if _newOwner is address(0).
+     * @custom:throws "New owner must be allowed already" if _newOwner is not in allowedUsers.
      */
     function changeOwner(address _newOwner) public onlyOwner {
+        require(_newOwner != address(0), "New owner cannot be zero address");
+        require(allowedUsers[_newOwner], "New owner must be allowed already");
         owner = _newOwner;
     }
 
@@ -134,12 +135,14 @@ contract DSS_Storage {
      * 
      * This function performs intelligent upsert logic:
      * - If the ID is new: inserts the OIR data into all specified geohashes.
+     *   Sets createdBy = msg.sender and lastUpdatedBy = msg.sender.
      * - If the ID exists: updates the OIR data and manages geohash associations.
-     *   - Geohashes that exist in both old and new lists are updated.
+     *   Preserves createdBy, updates lastUpdatedBy = msg.sender.
+     *   - Geohashes that exist in both old and new lists: data is updated.
      *   - New geohashes are added.
      *   - Old geohashes not in the new list are removed.
      * 
-     * Ownership is automatically checked for existing OIRs via the onlyOIROwner modifier.
+     * Any allowed user can update any OIR, regardless of who created it.
      * 
      * @param _geohashes Array of geohash strings representing the spatial coverage of the OIR.
      * @param _minHeight Minimum height/altitude in the vertical interval (e.g., meters).
@@ -151,12 +154,10 @@ contract DSS_Storage {
      * @param _id Unique identifier for this OIR (must be > 0).
      * 
      * @custom:modifier onlyAllowed Only allowed users can call this function.
-     * @custom:modifier onlyOIROwner (conditional) If ID exists, only the original creator can update it.
      * 
      * @custom:throws "No geohashes provided" if _geohashes array is empty.
      * @custom:throws "Invalid height interval" if _maxHeight < _minHeight.
      * @custom:throws "Invalid time interval" if _startTime >= _endTime.
-     * @custom:throws "Not the owner of this OIR" if trying to update someone else's OIR.
      */
     function upsertOIR (
         string[] memory _geohashes,
@@ -174,17 +175,17 @@ contract DSS_Storage {
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
 
-        // Check ownership if OIR already exists
-        if (idToGeohash[_id].length > 0) {
-            require(idToData[_id].addedBy == msg.sender, "Not the owner of this OIR");
-        }
+        // Check if this is a new OIR or an update
+        bool isNewOIR = (idToGeohash[_id].length == 0);
 
         // Create a new OIRData object with the provided data.
         HeightInterval memory height = HeightInterval({min: _minHeight, max: _maxHeight});
         TimeInterval memory time = TimeInterval({start: _startTime, end: _endTime});
         ResourceInfo memory resourceInfo = ResourceInfo({url: _url, entityNumber: _entity, id: _id});
+        
         OIRData memory newOIR = OIRData({
-            addedBy: msg.sender,
+            createdBy: isNewOIR ? msg.sender : idToData[_id].createdBy,
+            lastUpdatedBy: msg.sender,
             height: height,
             time: time,
             resourceInfo: resourceInfo
@@ -242,10 +243,9 @@ contract DSS_Storage {
      * @param _geohash The geohash string representing the spatial location.
      * @param _oir The OIRData structure containing all data to be stored.
      * 
-     * @custom:modifier onlyAllowed Only allowed users can trigger this (via upsertOIR).
      * @custom:emits DataAdded Emitted when OIR is successfully added to a geohash.
      */
-    function addOIRToGeohash(string memory _geohash, OIRData memory _oir) private onlyAllowed {
+    function addOIRToGeohash(string memory _geohash, OIRData memory _oir) private {
         uint currentId = _oir.resourceInfo.id;
 
         // Store data once per ID
@@ -258,7 +258,7 @@ contract DSS_Storage {
         geohashToIds[_geohash].push(currentId);
 
         // Emit an event to log the addition of new data.
-        emit DataAdded(currentId, _geohash, _oir.addedBy);
+        emit DataAdded(currentId, _geohash, _oir.createdBy);
     }
 
 
@@ -270,31 +270,25 @@ contract DSS_Storage {
      * Only updates the OIRData in the idToData mapping. The geohash associations
      * are managed separately by the upsertOIR function.
      * 
+     * Any allowed user can update any OIR. The lastUpdatedBy field tracks who made the change.
+     * 
      * @param _geohash The geohash string (used for event emission only).
      * @param _oir The new OIRData to replace the existing entry.
      * 
-     * @custom:modifier onlyAllowed Only allowed users can trigger this (via upsertOIR).
-     * @custom:modifier onlyOIROwner (enforced in caller) Only the OIR creator can update.
      * @custom:emits DataUpdated Emitted when OIR data is successfully updated.
-     * @custom:throws "No data to be updated for the given id" if ID doesn't exist.
-     * @custom:throws "Not the owner of this data" if caller is not the creator.
      */
     function updateOIRData(
         string memory _geohash, 
         OIRData memory _oir
     ) 
-        private onlyAllowed
+        private
     {
         uint currentId = _oir.resourceInfo.id;
-        require(idToGeohash[currentId].length > 0, "No data to be updated for the given id");
-
-        // Check ownership using the stored data
-        require(idToData[currentId].addedBy == msg.sender, "Not the owner of this data");
 
         // Update the data once (in idToData)
         idToData[currentId] = _oir;
 
-        emit DataUpdated(currentId, _geohash, msg.sender);
+        emit DataUpdated(currentId, _geohash, _oir.lastUpdatedBy);
     }
     
 
@@ -308,16 +302,14 @@ contract DSS_Storage {
      * - Deletes the OIRData from idToData.
      * - Clears the geohash list for each ID.
      * 
-     * Ownership is automatically verified via the onlyOIROwner modifier.
-     * Only the original creator of each OIR can delete it.
+     * Any allowed user can delete any OIR, regardless of who created it.
+     * If an ID doesn't exist, it is silently ignored (no revert).
      * 
-     * @param _ids Array of OIR IDs to delete (must be owned by caller).
+     * @param _ids Array of OIR IDs to delete.
      * 
      * @custom:modifier onlyAllowed Only allowed users can call this function.
-     * @custom:modifier onlyOIROwner (per ID) Only the creator of each OIR can delete it.
      * @custom:emits DataDeleted Emitted for each geohash from which the OIR is removed.
      * @custom:throws "No ids provided" if _ids array is empty.
-     * @custom:throws "Not the owner of this data" if trying to delete someone else's OIR.
      */
     function deleteOIR(uint[] memory _ids) public onlyAllowed {
         require(_ids.length > 0, "No ids provided");
@@ -346,13 +338,9 @@ contract DSS_Storage {
      * @param _id The unique identifier of the OIR to be removed.
      * @param _geohash The geohash string from which to remove this OIR.
      * 
-     * @custom:modifier onlyOIROwner (enforced in caller) Only the OIR creator can remove.
      * @custom:emits DataDeleted Emitted when OIR is successfully removed from geohash.
-     * @custom:throws "Not the owner of this data" if caller is not the creator.
      */
     function removeOIRFromGeohash(uint _id, string memory _geohash) private {
-        // Check ownership using the stored data
-        require(idToData[_id].addedBy == msg.sender, "Not the owner of this data");
 
         // Retrieve the array of IDs associated with the given geohash.
         uint[] storage currentIds = geohashToIds[_geohash];
