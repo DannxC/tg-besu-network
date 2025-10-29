@@ -98,7 +98,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     };
 
     it("Deve permitir adicionar dados de polígono", async function() {
-      const tx = await dssStorage.upsertPolygonData(
+      const tx = await dssStorage.upsertOIR(
         testData.geohashes,
         testData.minHeight,
         testData.maxHeight,
@@ -118,7 +118,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
 
     it("Deve retornar dados corretos ao consultar", async function() {
-      const result = await dssStorage.getData(
+      const result = await dssStorage.getOIRsByGeohash(
         testData.geohashes[0],
         testData.minHeight,
         testData.maxHeight,
@@ -135,7 +135,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     it("Deve rejeitar se usuário não estiver na allowedList", async function() {
       let reverted = false;
       try {
-        const tx = await dssStorage.connect(user2).upsertPolygonData(
+        const tx = await dssStorage.connect(user2).upsertOIR(
           ["u4pruydqqva"],
           100, 500,
           testData.startTime, testData.endTime,
@@ -156,7 +156,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     it("Deve permitir atualizar dados existentes", async function() {
       const updatedUrl = "https://example.com/data/001-updated";
       
-      const tx = await dssStorage.upsertPolygonData(
+      const tx = await dssStorage.upsertOIR(
         ["u4pruydqqvj", "u4pruydqqvm"], // Menos geohashes
         100,
         500,
@@ -171,7 +171,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       console.log(`   Gas usado (update): ${receipt.gasUsed.toString()}`);
       
       // Verificar se atualizou
-      const result = await dssStorage.getData(
+      const result = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvj",
         100,
         500,
@@ -183,7 +183,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
 
     it("Deve emitir evento DataUpdated", async function() {
-      const tx = await dssStorage.upsertPolygonData(
+      const tx = await dssStorage.upsertOIR(
         ["u4pruydqqvj"],
         100,
         500,
@@ -203,7 +203,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     it.skip("User1 não deve poder atualizar dados do owner (BUG NO CONTRATO)", async function() {
       let reverted = false;
       try {
-        const tx = await dssStorage.connect(user1).upsertPolygonData(
+        const tx = await dssStorage.connect(user1).upsertOIR(
           ["u4pruydqqvj"],
           100, 500,
           Math.floor(Date.now() / 1000),
@@ -234,7 +234,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     };
 
     it("Deve adicionar dados para depois deletar", async function() {
-      const tx = await dssStorage.upsertPolygonData(
+      const tx = await dssStorage.upsertOIR(
         deleteTestData.geohashes,
         deleteTestData.minHeight,
         deleteTestData.maxHeight,
@@ -248,7 +248,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       await tx.wait();
       
       // Verificar que foi adicionado
-      const result = await dssStorage.getData(
+      const result = await dssStorage.getOIRsByGeohash(
         deleteTestData.geohashes[0],
         deleteTestData.minHeight,
         deleteTestData.maxHeight,
@@ -260,7 +260,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
 
     it("Deve permitir deletar dados por ID", async function() {
-      const tx = await dssStorage.deletePolygonData([deleteTestData.id]);
+      const tx = await dssStorage.deleteOIR([deleteTestData.id]);
       const receipt = await tx.wait();
       
       console.log(`   Gas usado (delete): ${receipt.gasUsed.toString()}`);
@@ -271,7 +271,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
 
     it("Dados deletados não devem mais aparecer nas consultas", async function() {
-      const result = await dssStorage.getData(
+      const result = await dssStorage.getOIRsByGeohash(
         deleteTestData.geohashes[0],
         deleteTestData.minHeight,
         deleteTestData.maxHeight,
@@ -287,7 +287,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     it.skip("User1 não deve poder deletar dados do owner (BUG NO CONTRATO)", async function() {
       let reverted = false;
       try {
-        const tx = await dssStorage.connect(user1).deletePolygonData([1001]);
+        const tx = await dssStorage.connect(user1).deleteOIR([1001]);
         await tx.wait();
       } catch (error) {
         const err = error as Error;
@@ -304,7 +304,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     before(async function() {
       const now = Math.floor(Date.now() / 1000);
       
-      const tx1 = await dssStorage.upsertPolygonData(
+      const tx1 = await dssStorage.upsertOIR(
         ["u4pruydqqvh"],
         1000, 2000,
         now, now + 3600,
@@ -313,7 +313,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       );
       await tx1.wait();
       
-      const tx2 = await dssStorage.upsertPolygonData(
+      const tx2 = await dssStorage.upsertOIR(
         ["u4pruydqqvi"],
         0, 1000,
         now + 1000, now + 2000,
@@ -322,7 +322,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       );
       await tx2.wait();
       
-      const tx3 = await dssStorage.connect(user1).upsertPolygonData(
+      const tx3 = await dssStorage.connect(user1).upsertOIR(
         ["u4pruydqqvk"],
         500, 1500,
         now, now + 7200,
@@ -335,7 +335,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     });
 
     it("Deve retornar array vazio quando não há dados matching", async function() {
-      const result = await dssStorage.getData(
+      const result = await dssStorage.getOIRsByGeohash(
         "nonexistent",
         0, 1000,
         0, 999999999999
@@ -348,7 +348,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
 
     it("Deve filtrar por intervalo de altura", async function() {
       // Consultar com altura que não overlaps
-      const noMatch = await dssStorage.getData(
+      const noMatch = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvh",
         3000, 4000,
         0, 999999999999
@@ -356,7 +356,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(noMatch.urls.length).to.equal(0);
       
       // Consultar com altura que overlaps
-      const match = await dssStorage.getData(
+      const match = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvh",
         1500, 1600,
         0, 999999999999
@@ -369,7 +369,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       const now = Math.floor(Date.now() / 1000);
       
       // Consultar tempo passado (não deve encontrar)
-      const pastQuery = await dssStorage.getData(
+      const pastQuery = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvi",
         0, 1000,
         now - 2000, now - 1000
@@ -377,7 +377,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(pastQuery.urls.length).to.equal(0);
       
       // Consultar tempo que overlaps
-      const futureQuery = await dssStorage.getData(
+      const futureQuery = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvi",
         0, 1000,
         now + 1500, now + 1600
@@ -388,7 +388,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
 
     it("Diferentes usuários devem poder consultar todos os dados", async function() {
       // Owner consulta dados do user1
-      const ownerQuery = await dssStorage.getData(
+      const ownerQuery = await dssStorage.getOIRsByGeohash(
         "u4pruydqqvk",
         500, 1500,
         0, 999999999999
@@ -396,7 +396,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       expect(ownerQuery.urls[0]).to.equal("https://example.com/user1-data");
       
       // User1 consulta dados do owner
-      const user1Query = await dssStorage.connect(user1).getData(
+      const user1Query = await dssStorage.connect(user1).getOIRsByGeohash(
         "u4pruydqqvh",
         1000, 2000,
         0, 999999999999
@@ -409,7 +409,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
     it("Deve rejeitar intervalo de altura inválido", async function() {
       let reverted = false;
       try {
-        const tx = await dssStorage.upsertPolygonData(
+        const tx = await dssStorage.upsertOIR(
           ["test"],
           500, 100, // Invertido!
           Math.floor(Date.now() / 1000),
@@ -431,7 +431,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       let reverted = false;
       
       try {
-        const tx = await dssStorage.upsertPolygonData(
+        const tx = await dssStorage.upsertOIR(
           ["test"],
           100, 500,
           now + 3600, now, // Invertido!
@@ -451,7 +451,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       let reverted = false;
       
       try {
-        const tx = await dssStorage.upsertPolygonData(
+        const tx = await dssStorage.upsertOIR(
           [], // Vazio!
           100, 500,
           Math.floor(Date.now() / 1000),
@@ -505,21 +505,21 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       
       // Enviar transações de usuários DIFERENTES em paralelo (evita nonce collision)
       const [tx1, tx2, tx3] = await Promise.all([
-        dssStorage.upsertPolygonData(
+        dssStorage.upsertOIR(
           ["u4concurrency1"],
           0, 1000,
           now, now + 3600,
           "https://example.com/owner-concurrent",
           100, 20001
         ),
-        dssStorage.connect(user1).upsertPolygonData(
+        dssStorage.connect(user1).upsertOIR(
           ["u4concurrency2"],
           1000, 2000,
           now, now + 3600,
           "https://example.com/user1-concurrent",
           101, 20002
         ),
-        dssStorage.connect(user2).upsertPolygonData(
+        dssStorage.connect(user2).upsertOIR(
           ["u4concurrency3"],
           2000, 3000,
           now, now + 3600,
@@ -537,9 +537,9 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu", function() {
       
       // Verificar que todos os dados foram inseridos
       const results = await Promise.all([
-        dssStorage.getData("u4concurrency1", 0, 1000, now, now + 3600),
-        dssStorage.getData("u4concurrency2", 1000, 2000, now, now + 3600),
-        dssStorage.getData("u4concurrency3", 2000, 3000, now, now + 3600)
+        dssStorage.getOIRsByGeohash("u4concurrency1", 0, 1000, now, now + 3600),
+        dssStorage.getOIRsByGeohash("u4concurrency2", 1000, 2000, now, now + 3600),
+        dssStorage.getOIRsByGeohash("u4concurrency3", 2000, 3000, now, now + 3600)
       ]);
       
       expect(results[0].ids[0].toNumber()).to.equal(20001);

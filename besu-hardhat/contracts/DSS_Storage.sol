@@ -40,9 +40,10 @@ contract DSS_Storage {
         uint id; // Must be greater than 0.
     }
 
-    /// @dev Represents a chunk of geospatial data.
-    struct ChunkData {
-        address addedBy; // Address of the user who added the chunk.
+    /// @dev Represents the core data of an Operational Intent Reference (OIR).
+    /// Note: The complete OIR includes this data + geohashes stored in idToGeohash mapping.
+    struct OIRData {
+        address addedBy; // Address of the user who added the OIR.
         HeightInterval height;
         TimeInterval time;
         ResourceInfo resourceInfo;
@@ -51,10 +52,12 @@ contract DSS_Storage {
 
     /* STATE VARIABLES */
 
+    /// @dev Maps an ID to its OIR data (stored once per ID).
+    mapping(uint => OIRData) public idToData;
     /// @dev Maps an ID to an array of geohashes.
     mapping(uint => string[]) public idToGeohash;
-    /// @dev Maps a geohash to an array of ChunkData.
-    mapping(string => ChunkData[]) public geohashToChunkDataArray;
+    /// @dev Maps a geohash to an array of IDs (instead of full OIRData array).
+    mapping(string => uint[]) public geohashToIds;
     /// @dev Tracks which addresses are allowed to perform certain operations.
     mapping(address => bool) public allowedUsers;
     /// @dev Stores the address of the contract owner.
@@ -103,10 +106,10 @@ contract DSS_Storage {
     /* UPSERT */
 
     /**
-     * @dev Adds or updates a polygon data, represented as a set of geohashes and corresponding ChunkData.
-     * A polygon is part of a full route. This function checks for existing data and updates or deletes as necessary.
+     * @dev Adds or updates an OIR (Operational Intent Reference), represented as a set of geohashes.
+     * This function checks for existing data and updates or deletes as necessary.
      */
-    function upsertPolygonData (
+    function upsertOIR (
         string[] memory _geohashes,
         uint _minHeight,
         uint _maxHeight,
@@ -122,11 +125,11 @@ contract DSS_Storage {
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
 
-        // Create a new ChunkData object with the provided data.
+        // Create a new OIRData object with the provided data.
         HeightInterval memory height = HeightInterval({min: _minHeight, max: _maxHeight});
         TimeInterval memory time = TimeInterval({start: _startTime, end: _endTime});
         ResourceInfo memory resourceInfo = ResourceInfo({url: _url, entityNumber: _entity, id: _id});
-        ChunkData memory newChunkData = ChunkData({
+        OIRData memory newOIR = OIRData({
             addedBy: msg.sender,
             height: height,
             time: time,
@@ -143,21 +146,21 @@ contract DSS_Storage {
             bool exists = false; // Flag to check if the current geohash already exists in old geohashes.
 
             // Checks if the current geohash exists in the array of old geohashes.
-            // If it exists, update the corresponding ChunkData.
+            // If it exists, update the corresponding OIR.
             for (uint j = 0; j < oldGeohashes.length; j++) {
                 if (keccak256(abi.encodePacked(currentNewGeohash)) == keccak256(abi.encodePacked(oldGeohashes[j]))) {
                     exists = true; // Marks that the current new geohash exists in old geohashes.
                     oldGeohashesUpdated[j] = true; // Marks this geohash as updated in the tracking array.
 
-                    // Calls updateChunkData to update the existing ChunkData with the new data.
-                    updateChunkData(currentNewGeohash, newChunkData);
+                    // Calls updateOIRData to update the existing OIR with the new data.
+                    updateOIRData(currentNewGeohash, newOIR);
                     break; // Breaks the loop since the update is done.
                 }
             }
 
             // If the current new geohash does not exist in the old geohashes, insert it as new data.
             if (!exists) {
-                insertChunkData(currentNewGeohash, newChunkData);
+                addOIRToGeohash(currentNewGeohash, newOIR);
             }
         }
 
@@ -165,7 +168,7 @@ contract DSS_Storage {
         // This step ensures that any geohash not included in the new set of geohashes is removed.
         for (uint i = 0; i < oldGeohashes.length; i++) {
             if (!oldGeohashesUpdated[i]) { // Checks if the geohash was not updated.
-                deleteChunkData(_id, oldGeohashes[i]); // Deletes the ChunkData associated with the old geohash.
+                removeOIRFromGeohash(_id, oldGeohashes[i]); // Removes the OIR from the old geohash.
             }
         }
     }
@@ -175,105 +178,103 @@ contract DSS_Storage {
     /* INSERT */
 
     /**
-     * @dev Inserts new ChunkData for a given geohash. This function is called internally
+     * @dev Adds OIR data to a specific geohash. This function is called internally
      * to add data without duplicating logic for single or batch insertions.
      * @param _geohash The geohash representing the spatial location of the data.
-     * @param _chunkData The ChunkData structure containing the data to be added.
+     * @param _oir The OIRData structure containing the data to be added.
      */
-    function insertChunkData(string memory _geohash, ChunkData memory _chunkData) private onlyAllowed {
-        uint currentId = _chunkData.resourceInfo.id;
+    function addOIRToGeohash(string memory _geohash, OIRData memory _oir) private onlyAllowed {
+        uint currentId = _oir.resourceInfo.id;
+
+        // Store data once per ID
+        idToData[currentId] = _oir;
 
         // Append the geohash to the mapping of ID to geohashes.
         idToGeohash[currentId].push(_geohash);
 
-        // Append the new ChunkData to the array of ChunkData for the given geohash.
-        geohashToChunkDataArray[_geohash].push(_chunkData);
+        // Append the ID to the array of IDs for the given geohash.
+        geohashToIds[_geohash].push(currentId);
 
         // Emit an event to log the addition of new data.
-        emit DataAdded(currentId, _geohash, _chunkData.addedBy);
+        emit DataAdded(currentId, _geohash, _oir.addedBy);
     }
 
 
     /* UPDATE */
 
     /**
-     * @dev Updates the data for a specific ChunkData entry identified by geohash and internal ID.
+     * @dev Updates the core data for a specific OIR identified by ID.
      * Access is restricted to the data's original creator.
-     * @param _geohash The geohash of the ChunkData to be updated.
-     * @param _chunkData The new ChunkData to replace the existing entry.
+     * @param _geohash The geohash of the OIR (used for event emission).
+     * @param _oir The new OIRData to replace the existing entry.
      */
-    function updateChunkData(
+    function updateOIRData(
         string memory _geohash, 
-        ChunkData memory _chunkData
+        OIRData memory _oir
     ) 
         private onlyAllowed
     {
-        require(_chunkData.addedBy == msg.sender, "Not the owner of this data");
-
-        // Get the ID of the ChunkData to be updated.
-        uint currentId = _chunkData.resourceInfo.id;
+        uint currentId = _oir.resourceInfo.id;
         require(idToGeohash[currentId].length > 0, "No data to be updated for the given id");
 
-        // Find and update the specified ChunkData within the array.
-        ChunkData[] storage chunkDataArray = geohashToChunkDataArray[_geohash];
-        for (uint i = 0; i < chunkDataArray.length; i++) {
-            if (chunkDataArray[i].resourceInfo.id == currentId) {
-                chunkDataArray[i] = _chunkData;
-                emit DataUpdated(currentId, _geohash, msg.sender);
-                break;
-            }
-        }
+        // Check ownership using the stored data
+        require(idToData[currentId].addedBy == msg.sender, "Not the owner of this data");
+
+        // Update the data once (in idToData)
+        idToData[currentId] = _oir;
+
+        emit DataUpdated(currentId, _geohash, msg.sender);
     }
     
 
     /* DELETE */
 
     /**
-     * @dev Deletes a batch of ChunkData identified by their IDs. This function allows for efficient
+     * @dev Deletes a batch of OIRs identified by their IDs. This function allows for efficient
      * removal of multiple data entries and is accessible only to allowed users.
-     * @param _ids An array of IDs corresponding to the ChunkData entries to be deleted.
+     * @param _ids An array of IDs corresponding to the OIR entries to be deleted.
      */
-    function deletePolygonData(uint[] memory _ids) public onlyAllowed {
+    function deleteOIR(uint[] memory _ids) public onlyAllowed {
         require(_ids.length > 0, "No ids provided");
 
-        // Iterate through the provided IDs to delete the associated ChunkData.
+        // Iterate through the provided IDs to delete the associated OIRs.
         for (uint i = 0; i < _ids.length; i++) {
             uint currentId = _ids[i];
             string[] memory geohashes = idToGeohash[currentId];
 
             for (uint j = 0; j < geohashes.length; j++) {
-                deleteChunkData(currentId, geohashes[j]);
+                removeOIRFromGeohash(currentId, geohashes[j]);
             }
         }
     }
     
     /**
-     * @dev Removes a specific ChunkData entry identified by its ID from the geohash mapping.
-     * This operation is restricted to the creator of the ChunkData. It updates both the
-     * geohash to ChunkData mapping and the ID to geohash mapping to ensure data integrity.
-     * @param _id The unique identifier of the ChunkData to be removed.
-     * @param _geohash The geohash string that the ChunkData is associated with.
+     * @dev Removes a specific OIR from a given geohash mapping.
+     * This operation is restricted to the creator of the OIR. It updates both the
+     * geohash to ID mapping and the ID to geohash mapping to ensure data integrity.
+     * @param _id The unique identifier of the OIR to be removed.
+     * @param _geohash The geohash string that the OIR is associated with.
      */
-    function deleteChunkData(uint _id, string memory _geohash) private {
-        // Retrieve the array of ChunkData associated with the given geohash.
-        ChunkData[] storage currentChunkDataArray = geohashToChunkDataArray[_geohash];
+    function removeOIRFromGeohash(uint _id, string memory _geohash) private {
+        // Check ownership using the stored data
+        require(idToData[_id].addedBy == msg.sender, "Not the owner of this data");
+
+        // Retrieve the array of IDs associated with the given geohash.
+        uint[] storage currentIds = geohashToIds[_geohash];
 
         // Retrieve the array of geohashes associated with the given ID.
         string[] storage currentGeohashes = idToGeohash[_id];
 
-        // Iterate through the ChunkData array to find and remove the specified ChunkData.
-        for (uint i = 0; i < currentChunkDataArray.length; i++) {
-            if (currentChunkDataArray[i].resourceInfo.id == _id) {
-                // Check if the caller is the creator of the ChunkData.
-                require(currentChunkDataArray[i].addedBy == msg.sender, "Not the owner of this data");
+        // Iterate through the ID array to find and remove the specified ID.
+        for (uint i = 0; i < currentIds.length; i++) {
+            if (currentIds[i] == _id) {
+                // Replace the ID to be deleted with the last element in the array.
+                currentIds[i] = currentIds[currentIds.length - 1];
 
-                // Replace the ChunkData to be deleted with the last element in the array.
-                currentChunkDataArray[i] = currentChunkDataArray[currentChunkDataArray.length - 1];
-
-                // Remove the last element, effectively deleting the specified ChunkData.
-                currentChunkDataArray.pop();
+                // Remove the last element, effectively deleting the specified ID.
+                currentIds.pop();
                 
-                break; // Exit the loop after deleting the ChunkData.
+                break; // Exit the loop after deleting the ID.
             }
         }
 
@@ -290,7 +291,12 @@ contract DSS_Storage {
             }
         }
 
-        // Emit an event to log the deletion of the ChunkData.
+        // If no more geohashes for this ID, delete the data
+        if (currentGeohashes.length == 0) {
+            delete idToData[_id];
+        }
+
+        // Emit an event to log the deletion of the OIR.
         emit DataDeleted(_id, _geohash, msg.sender);
     }
 
@@ -299,18 +305,18 @@ contract DSS_Storage {
     /* RETRIEVE */
 
     /**
-     * @dev Retrieves data matching the specified criteria. This function allows users to query
-     * data based on geohash, height interval, and time interval, facilitating efficient data lookup.
+     * @dev Retrieves OIRs matching the specified criteria. This function allows users to query
+     * OIRs based on geohash, height interval, and time interval, facilitating efficient data lookup.
      * @param _geohash The geohash to query.
      * @param _minHeight The minimum height of the data.
      * @param _maxHeight The maximum height of the data.
      * @param _startTime The start time of the data interval.
      * @param _endTime The end time of the data interval.
-     * @return urls An array of URLs for the matching data.
-     * @return entityNumbers An array of entity numbers for the matching data.
-     * @return ids An array of IDs for the matching data.
+     * @return urls An array of URLs for the matching OIRs.
+     * @return entityNumbers An array of entity numbers for the matching OIRs.
+     * @return ids An array of IDs for the matching OIRs.
      */
-    function getData(
+    function getOIRsByGeohash(
         string memory _geohash, 
         uint _minHeight, 
         uint _maxHeight, 
@@ -320,12 +326,16 @@ contract DSS_Storage {
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
 
-        ChunkData[] storage chunkDataArray = geohashToChunkDataArray[_geohash];
+        // Get IDs for this geohash
+        uint[] storage idsInGeohash = geohashToIds[_geohash];
         uint count = 0;
 
         // Determine the number of entries that match the criteria.
-        for (uint i = 0; i < chunkDataArray.length; i++) {
-            if (meetsCriteria(chunkDataArray[i], _minHeight, _maxHeight, _startTime, _endTime)) {
+        for (uint i = 0; i < idsInGeohash.length; i++) {
+            uint currentId = idsInGeohash[i];
+            OIRData storage oir = idToData[currentId];
+            
+            if (meetsCriteria(oir, _minHeight, _maxHeight, _startTime, _endTime)) {
                 count++;
             }
         }
@@ -337,11 +347,14 @@ contract DSS_Storage {
 
         // Populate the output arrays with data that meets the criteria.
         uint index = 0;
-        for (uint i = 0; i < chunkDataArray.length && index < count; i++) {
-            if (meetsCriteria(chunkDataArray[i], _minHeight, _maxHeight, _startTime, _endTime)) {
-                urls[index] = chunkDataArray[i].resourceInfo.url;
-                entityNumbers[index] = chunkDataArray[i].resourceInfo.entityNumber;
-                ids[index] = chunkDataArray[i].resourceInfo.id;
+        for (uint i = 0; i < idsInGeohash.length && index < count; i++) {
+            uint currentId = idsInGeohash[i];
+            OIRData storage oir = idToData[currentId];
+            
+            if (meetsCriteria(oir, _minHeight, _maxHeight, _startTime, _endTime)) {
+                urls[index] = oir.resourceInfo.url;
+                entityNumbers[index] = oir.resourceInfo.entityNumber;
+                ids[index] = oir.resourceInfo.id;
                 index++;
             }
         }
@@ -350,27 +363,27 @@ contract DSS_Storage {
     }
 
     /**
-     * @dev Evaluates if a given ChunkData meets specified criteria based on height and time intervals.
-     * This function is used to filter ChunkData during data retrieval operations, ensuring that only
+     * @dev Evaluates if a given OIR data meets specified criteria based on height and time intervals.
+     * This function is used to filter OIRs during data retrieval operations, ensuring that only
      * data entries matching all criteria are selected.
      * 
-     * @param _chunkData The ChunkData structure to evaluate.
+     * @param _oir The OIRData structure to evaluate.
      * @param _minHeight The minimum height value of the filtering criteria.
      * @param _maxHeight The maximum height value of the filtering criteria.
      * @param _startTime The start time value (inclusive) of the filtering criteria, represented as a UNIX timestamp.
      * @param _endTime The end time value (exclusive) of the filtering criteria, represented as a UNIX timestamp.
      * 
-     * @return bool Returns true if the ChunkData satisfies all criteria; otherwise, returns false.
+     * @return bool Returns true if the OIR data satisfies all criteria; otherwise, returns false.
      */
     function meetsCriteria(
-        ChunkData memory _chunkData, 
+        OIRData memory _oir, 
         uint _minHeight, 
         uint _maxHeight, 
         uint _startTime, 
         uint _endTime
     ) private pure returns (bool) {
-        return _chunkData.height.min <= _maxHeight && _chunkData.height.max >= _minHeight && 
-               _chunkData.time.start < _endTime && _chunkData.time.end > _startTime;
+        return _oir.height.min <= _maxHeight && _oir.height.max >= _minHeight && 
+               _oir.time.start < _endTime && _oir.time.end > _startTime;
     }
     
 
