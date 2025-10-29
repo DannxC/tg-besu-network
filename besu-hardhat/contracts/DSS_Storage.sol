@@ -12,53 +12,45 @@ contract DSS_Storage {
     /* EVENTS */
 
     /// @dev Emitted when a new data chunk is added to a geohash.
-    event DataAdded(uint indexed id, string geohash, address indexed createdBy);
+    event DataAdded(bytes32 indexed id, bytes32 indexed geohash, address indexed createdBy);
     /// @dev Emitted when existing data chunk is updated.
-    event DataUpdated(uint indexed id, string geohash, address indexed updatedBy);
+    event DataUpdated(bytes32 indexed id, bytes32 indexed geohash, address updatedBy);
     /// @dev Emitted when a data chunk is deleted from a geohash.
-    event DataDeleted(uint indexed id, string geohash, address indexed deletedBy);
+    event DataDeleted(bytes32 indexed id, bytes32 indexed geohash, address deletedBy);
 
 
     /* STRUCTS */
 
-    /// @dev Represents a height interval with minimum and maximum bounds.
-    struct HeightInterval {
-        uint min;
-        uint max;
-    }
-
-    /// @dev Represents a time interval with start and end times.
-    struct TimeInterval {
-        uint start; // UTC timestamp for interval start.
-        uint end;   // UTC timestamp for interval end.
-    }
-
-    /// @dev Contains resource information including URL, entity number, and an identifier.
-    struct ResourceInfo {
-        string url;
-        uint entityNumber;
-        uint id; // Must be greater than 0.
-    }
-
     /// @dev Represents the core data of an Operational Intent Reference (OIR).
     /// Note: The complete OIR includes this data + geohashes stored in idToGeohash mapping.
+    /// 
+    /// Storage layout: ~124 bytes + dynamic string (optimized packing!)
+    /// Slot 0: createdBy (20 bytes) + minHeight (2 bytes) + maxHeight (2 bytes) + entityNumber (2 bytes) = 26 bytes (fits in 1 slot)
+    /// Slot 1: lastUpdatedBy (20 bytes) + padding (12 bytes)
+    /// Slot 2: startTime (8 bytes) + endTime (8 bytes) = 16 bytes (fits in 1 slot)
+    /// Slot 3: id (32 bytes)
+    /// Slot 4+: url (dynamic string)
     struct OIRData {
-        address createdBy; // Address of the user who originally created the OIR.
-        address lastUpdatedBy; // Address of the user who last modified the OIR (geohashes or metadata).
-        HeightInterval height;
-        TimeInterval time;
-        ResourceInfo resourceInfo;
+        address createdBy;        // 20 bytes - Address of the user who originally created the OIR
+        uint16 minHeight;         // 2 bytes  - Minimum altitude in meters (0 to 65,535)
+        uint16 maxHeight;         // 2 bytes  - Maximum altitude in meters (0 to 65,535)
+        uint16 entityNumber;      // 2 bytes  - Entity identifier (0 to 65,535)
+        address lastUpdatedBy;    // 20 bytes - Address of the user who last modified the OIR (new slot)
+        uint64 startTime;         // 8 bytes  - Epoch timestamp in milliseconds (0 to ~584 million years)
+        uint64 endTime;           // 8 bytes  - Epoch timestamp in milliseconds (0 to ~584 million years)
+        bytes32 id;               // 32 bytes - Unique identifier for this OIR
+        string url;               // Dynamic - URL pointing to detailed OIR information
     }
 
 
     /* STATE VARIABLES */
 
-    /// @dev Maps an ID to its OIR data (stored once per ID).
-    mapping(uint => OIRData) public idToData;
-    /// @dev Maps an ID to an array of geohashes.
-    mapping(uint => string[]) public idToGeohash;
-    /// @dev Maps a geohash to an array of IDs (instead of full OIRData array).
-    mapping(string => uint[]) public geohashToIds;
+    /// @dev Maps an ID (bytes32) to its OIR data (stored once per ID).
+    mapping(bytes32 => OIRData) public idToData;
+    /// @dev Maps an ID to an array of geohashes (bytes32).
+    mapping(bytes32 => bytes32[]) public idToGeohash;
+    /// @dev Maps a geohash (bytes32) to an array of IDs (bytes32).
+    mapping(bytes32 => bytes32[]) public geohashToIds;
     /// @dev Tracks which addresses are allowed to perform certain operations.
     mapping(address => bool) public allowedUsers;
     /// @dev Stores the address of the contract owner.
@@ -144,30 +136,32 @@ contract DSS_Storage {
      * 
      * Any allowed user can update any OIR, regardless of who created it.
      * 
-     * @param _geohashes Array of geohash strings representing the spatial coverage of the OIR.
-     * @param _minHeight Minimum height/altitude in the vertical interval (e.g., meters).
-     * @param _maxHeight Maximum height/altitude in the vertical interval (e.g., meters).
-     * @param _startTime Start timestamp (UNIX time) of the temporal interval.
-     * @param _endTime End timestamp (UNIX time) of the temporal interval.
-     * @param _url URL pointing to detailed OIR information.
-     * @param _entity Entity number/identifier associated with this OIR.
-     * @param _id Unique identifier for this OIR (must be > 0).
+     * @param _geohashes Array of geohash bytes32 representing the spatial coverage (calldata = no copy, cheaper!).
+     * @param _minHeight Minimum height/altitude in meters (0 to 65,535).
+     * @param _maxHeight Maximum height/altitude in meters (0 to 65,535).
+     * @param _startTime Start timestamp in milliseconds (epoch, 0 to ~584 million years).
+     * @param _endTime End timestamp in milliseconds (epoch, 0 to ~584 million years).
+     * @param _url URL pointing to detailed OIR information (calldata = no copy).
+     * @param _entity Entity number/identifier (0 to 65,535).
+     * @param _id Unique identifier for this OIR (bytes32).
      * 
      * @custom:modifier onlyAllowed Only allowed users can call this function.
      * 
      * @custom:throws "No geohashes provided" if _geohashes array is empty.
      * @custom:throws "Invalid height interval" if _maxHeight < _minHeight.
      * @custom:throws "Invalid time interval" if _startTime >= _endTime.
+     * 
+     * @custom:note Using calldata for arrays saves ~3x gas compared to memory (no copy operation).
      */
     function upsertOIR (
-        string[] memory _geohashes,
-        uint _minHeight,
-        uint _maxHeight,
-        uint _startTime,
-        uint _endTime,
-        string memory _url,
-        uint _entity,
-        uint _id
+        bytes32[] calldata _geohashes,
+        uint16 _minHeight,
+        uint16 _maxHeight,
+        uint64 _startTime,
+        uint64 _endTime,
+        string calldata _url,
+        uint16 _entity,
+        bytes32 _id
     ) 
         public onlyAllowed
     {
@@ -178,52 +172,65 @@ contract DSS_Storage {
         // Check if this is a new OIR or an update
         bool isNewOIR = (idToGeohash[_id].length == 0);
 
-        // Create a new OIRData object with the provided data.
-        HeightInterval memory height = HeightInterval({min: _minHeight, max: _maxHeight});
-        TimeInterval memory time = TimeInterval({start: _startTime, end: _endTime});
-        ResourceInfo memory resourceInfo = ResourceInfo({url: _url, entityNumber: _entity, id: _id});
-        
+        // Determine createdBy: preserve original creator or set as msg.sender for new OIRs
+        address createdByAddress;
+        if (isNewOIR) {
+            createdByAddress = msg.sender;
+        } else {
+            createdByAddress = idToData[_id].createdBy;
+        }
+
+        // Create a new OIRData object with the provided data
         OIRData memory newOIR = OIRData({
-            createdBy: isNewOIR ? msg.sender : idToData[_id].createdBy,
+            createdBy: createdByAddress,
+            minHeight: _minHeight,
+            maxHeight: _maxHeight,
+            entityNumber: _entity,
             lastUpdatedBy: msg.sender,
-            height: height,
-            time: time,
-            resourceInfo: resourceInfo
+            startTime: _startTime,
+            endTime: _endTime,
+            id: _id,
+            url: _url
         });
 
-        // Maps old geohashes for the given id to update and delete as necessary.
-        string[] memory oldGeohashes = idToGeohash[_id];
-        bool[] memory oldGeohashesUpdated = new bool[](oldGeohashes.length);
-
-        // Iterates over each new geohash provided in the input to add or update polygon data.
-        for (uint i = 0; i < _geohashes.length; i++) {
-            string memory currentNewGeohash = _geohashes[i];
-            bool exists = false; // Flag to check if the current geohash already exists in old geohashes.
-
-            // Checks if the current geohash exists in the array of old geohashes.
-            // If it exists, update the corresponding OIR.
-            for (uint j = 0; j < oldGeohashes.length; j++) {
-                if (keccak256(abi.encodePacked(currentNewGeohash)) == keccak256(abi.encodePacked(oldGeohashes[j]))) {
-                    exists = true; // Marks that the current new geohash exists in old geohashes.
-                    oldGeohashesUpdated[j] = true; // Marks this geohash as updated in the tracking array.
-
-                    // Calls updateOIRData to update the existing OIR with the new data.
-                    updateOIRData(currentNewGeohash, newOIR);
-                    break; // Breaks the loop since the update is done.
+        // For new OIRs: simply add all geohashes
+        // For existing OIRs: update/add/remove as needed
+        if (isNewOIR) {
+            // Simple case: just add all new geohashes
+            for (uint16 i = 0; i < _geohashes.length; i++) {
+                addOIRToGeohash(_geohashes[i], newOIR);
+            }
+        } else {
+            // Complex case: manage existing geohashes
+            bytes32[] storage oldGeohashes = idToGeohash[_id]; // Storage pointer
+            bool[] memory oldGeohashesProcessed = new bool[](oldGeohashes.length);
+            
+            // Process new geohashes: check if exists in old, then update or add
+            for (uint16 i = 0; i < _geohashes.length; i++) {
+                bytes32 currentGeohash = _geohashes[i];
+                bool foundInOld = false;
+                
+                // Check if this geohash exists in old geohashes - direct bytes32 comparison!
+                for (uint16 j = 0; j < oldGeohashes.length; j++) {
+                    if (currentGeohash == oldGeohashes[j]) {
+                        foundInOld = true;
+                        oldGeohashesProcessed[j] = true; // Mark as processed
+                        updateOIRData(currentGeohash, newOIR);
+                        break;
+                    }
+                }
+                
+                if (!foundInOld) {
+                    // New geohash: add
+                    addOIRToGeohash(currentGeohash, newOIR);
                 }
             }
 
-            // If the current new geohash does not exist in the old geohashes, insert it as new data.
-            if (!exists) {
-                addOIRToGeohash(currentNewGeohash, newOIR);
-            }
-        }
-
-        // Deletes the old geohashes that were not marked as updated.
-        // This step ensures that any geohash not included in the new set of geohashes is removed.
-        for (uint i = 0; i < oldGeohashes.length; i++) {
-            if (!oldGeohashesUpdated[i]) { // Checks if the geohash was not updated.
-                removeOIRFromGeohash(_id, oldGeohashes[i]); // Removes the OIR from the old geohash.
+            // Remove old geohashes that were not processed (not in new list)
+            for (uint16 i = 0; i < oldGeohashes.length; i++) {
+                if (!oldGeohashesProcessed[i]) {
+                    removeOIRFromGeohash(_id, oldGeohashes[i]);
+                }
             }
         }
     }
@@ -240,24 +247,24 @@ contract DSS_Storage {
      * 2. Adds the geohash to the list of geohashes for this ID.
      * 3. Adds the ID to the list of IDs for this geohash.
      * 
-     * @param _geohash The geohash string representing the spatial location.
+     * @param _geohash The geohash bytes32 representing the spatial location.
      * @param _oir The OIRData structure containing all data to be stored.
      * 
      * @custom:emits DataAdded Emitted when OIR is successfully added to a geohash.
      */
-    function addOIRToGeohash(string memory _geohash, OIRData memory _oir) private {
-        uint currentId = _oir.resourceInfo.id;
+    function addOIRToGeohash(bytes32 _geohash, OIRData memory _oir) private {
+        bytes32 currentId = _oir.id;
 
         // Store data once per ID
         idToData[currentId] = _oir;
 
-        // Append the geohash to the mapping of ID to geohashes.
+        // Append the geohash to the mapping of ID to geohashes
         idToGeohash[currentId].push(_geohash);
 
-        // Append the ID to the array of IDs for the given geohash.
+        // Append the ID to the array of IDs for the given geohash
         geohashToIds[_geohash].push(currentId);
 
-        // Emit an event to log the addition of new data.
+        // Emit an event to log the addition of new data
         emit DataAdded(currentId, _geohash, _oir.createdBy);
     }
 
@@ -272,18 +279,18 @@ contract DSS_Storage {
      * 
      * Any allowed user can update any OIR. The lastUpdatedBy field tracks who made the change.
      * 
-     * @param _geohash The geohash string (used for event emission only).
+     * @param _geohash The geohash bytes32 (used for event emission only).
      * @param _oir The new OIRData to replace the existing entry.
      * 
      * @custom:emits DataUpdated Emitted when OIR data is successfully updated.
      */
     function updateOIRData(
-        string memory _geohash, 
+        bytes32 _geohash, 
         OIRData memory _oir
     ) 
         private
     {
-        uint currentId = _oir.resourceInfo.id;
+        bytes32 currentId = _oir.id;
 
         // Update the data once (in idToData)
         idToData[currentId] = _oir;
@@ -305,21 +312,21 @@ contract DSS_Storage {
      * Any allowed user can delete any OIR, regardless of who created it.
      * If an ID doesn't exist, it is silently ignored (no revert).
      * 
-     * @param _ids Array of OIR IDs to delete.
+     * @param _ids Array of OIR IDs (bytes32) to delete (calldata = no copy).
      * 
      * @custom:modifier onlyAllowed Only allowed users can call this function.
      * @custom:emits DataDeleted Emitted for each geohash from which the OIR is removed.
      * @custom:throws "No ids provided" if _ids array is empty.
      */
-    function deleteOIR(uint[] memory _ids) public onlyAllowed {
+    function deleteOIR(bytes32[] calldata _ids) public onlyAllowed {
         require(_ids.length > 0, "No ids provided");
 
-        // Iterate through the provided IDs to delete the associated OIRs.
-        for (uint i = 0; i < _ids.length; i++) {
-            uint currentId = _ids[i];
-            string[] memory geohashes = idToGeohash[currentId];
+        // Iterate through the provided IDs to delete the associated OIRs
+        for (uint16 i = 0; i < _ids.length; i++) { // uint16 = 0 to 65,535 IDs per batch
+            bytes32 currentId = _ids[i];
+            bytes32[] storage geohashes = idToGeohash[currentId]; // Storage pointer (no copy!)
 
-            for (uint j = 0; j < geohashes.length; j++) {
+            for (uint16 j = 0; j < geohashes.length; j++) {
                 removeOIRFromGeohash(currentId, geohashes[j]);
             }
         }
@@ -335,42 +342,36 @@ contract DSS_Storage {
      * 
      * Uses the swap-and-pop pattern for efficient array element removal.
      * 
-     * @param _id The unique identifier of the OIR to be removed.
-     * @param _geohash The geohash string from which to remove this OIR.
+     * @param _id The unique identifier (bytes32) of the OIR to be removed.
+     * @param _geohash The geohash bytes32 from which to remove this OIR.
      * 
      * @custom:emits DataDeleted Emitted when OIR is successfully removed from geohash.
      */
-    function removeOIRFromGeohash(uint _id, string memory _geohash) private {
+    function removeOIRFromGeohash(bytes32 _id, bytes32 _geohash) private {
 
-        // Retrieve the array of IDs associated with the given geohash.
-        uint[] storage currentIds = geohashToIds[_geohash];
+        // Retrieve the array of IDs associated with the given geohash (storage pointer)
+        bytes32[] storage currentIds = geohashToIds[_geohash];
 
-        // Retrieve the array of geohashes associated with the given ID.
-        string[] storage currentGeohashes = idToGeohash[_id];
+        // Retrieve the array of geohashes associated with the given ID (storage pointer)
+        bytes32[] storage currentGeohashes = idToGeohash[_id];
 
-        // Iterate through the ID array to find and remove the specified ID.
-        for (uint i = 0; i < currentIds.length; i++) {
+        // Iterate through the ID array to find and remove the specified ID
+        for (uint16 i = 0; i < currentIds.length; i++) { // uint16 = 0 to 65,535 IDs per geohash
             if (currentIds[i] == _id) {
-                // Replace the ID to be deleted with the last element in the array.
+                // Swap-and-pop: replace with last element
                 currentIds[i] = currentIds[currentIds.length - 1];
-
-                // Remove the last element, effectively deleting the specified ID.
                 currentIds.pop();
-                
-                break; // Exit the loop after deleting the ID.
+                break; // Exit after deleting
             }
         }
-
-        // Iterate through the geohash array to update the ID to geohash mapping.
-        for (uint i = 0; i < currentGeohashes.length; i++) {
-            if (keccak256(abi.encodePacked(currentGeohashes[i])) == keccak256(abi.encodePacked(_geohash))) {
-                // Replace the geohash to be deleted with the last element in the array.
+        // Iterate through the geohash array to find and remove the specified geohash
+        // No need for keccak256 anymore - direct bytes32 comparison!
+        for (uint16 i = 0; i < currentGeohashes.length; i++) {
+            if (currentGeohashes[i] == _geohash) { // Direct comparison (much cheaper!)
+                // Swap-and-pop: replace with last element
                 currentGeohashes[i] = currentGeohashes[currentGeohashes.length - 1];
-
-                // Remove the last element, effectively deleting the specified geohash from the ID mapping.
                 currentGeohashes.pop();
-
-                break; // Exit the loop after updating the mapping.
+                break; // Exit after deleting
             }
         }
 
@@ -379,7 +380,7 @@ contract DSS_Storage {
             delete idToData[_id];
         }
 
-        // Emit an event to log the deletion of the OIR.
+        // Emit an event to log the deletion
         emit DataDeleted(_id, _geohash, msg.sender);
     }
 
@@ -398,15 +399,15 @@ contract DSS_Storage {
      * - Height: OIR's [min, max] must overlap with query's [_minHeight, _maxHeight].
      * - Time: OIR's [start, end] must overlap with query's [_startTime, _endTime].
      * 
-     * @param _geohash The geohash string to query (e.g., "u4pruydqqvj").
-     * @param _minHeight Minimum height/altitude for filtering (inclusive).
-     * @param _maxHeight Maximum height/altitude for filtering (inclusive).
-     * @param _startTime Start timestamp for filtering (inclusive, UNIX time).
-     * @param _endTime End timestamp for filtering (exclusive, UNIX time).
+     * @param _geohash The geohash bytes32 to query.
+     * @param _minHeight Minimum height/altitude for filtering in meters (0 to 65,535).
+     * @param _maxHeight Maximum height/altitude for filtering in meters (0 to 65,535).
+     * @param _startTime Start timestamp for filtering in milliseconds (epoch, 0 to ~584 million years).
+     * @param _endTime End timestamp for filtering in milliseconds (epoch, 0 to ~584 million years).
      * 
      * @return urls Array of URLs for matching OIRs.
      * @return entityNumbers Array of entity identifiers for matching OIRs.
-     * @return ids Array of OIR IDs that match all criteria.
+     * @return ids Array of OIR IDs (bytes32) that match all criteria.
      * 
      * @custom:throws "Invalid height interval" if _maxHeight < _minHeight.
      * @custom:throws "Invalid time interval" if _startTime >= _endTime.
@@ -415,22 +416,22 @@ contract DSS_Storage {
      * @custom:note Returns empty arrays if no OIRs match the criteria.
      */
     function getOIRsByGeohash(
-        string memory _geohash, 
-        uint _minHeight, 
-        uint _maxHeight, 
-        uint _startTime, 
-        uint _endTime
-    ) public view returns (string[] memory urls, uint[] memory entityNumbers, uint[] memory ids) {
+        bytes32 _geohash, 
+        uint16 _minHeight, 
+        uint16 _maxHeight, 
+        uint64 _startTime, 
+        uint64 _endTime
+    ) public view returns (string[] memory urls, uint16[] memory entityNumbers, bytes32[] memory ids) {
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
 
-        // Get IDs for this geohash
-        uint[] storage idsInGeohash = geohashToIds[_geohash];
-        uint count = 0;
+        // Get IDs for this geohash (storage pointer - no copy!)
+        bytes32[] storage idsInGeohash = geohashToIds[_geohash];
+        uint16 count = 0; // uint16 = max 65,535 matches
 
-        // Determine the number of entries that match the criteria.
-        for (uint i = 0; i < idsInGeohash.length; i++) {
-            uint currentId = idsInGeohash[i];
+        // First pass: count matches
+        for (uint16 i = 0; i < idsInGeohash.length; i++) {
+            bytes32 currentId = idsInGeohash[i];
             OIRData storage oir = idToData[currentId];
             
             if (meetsCriteria(oir, _minHeight, _maxHeight, _startTime, _endTime)) {
@@ -438,21 +439,21 @@ contract DSS_Storage {
             }
         }
 
-        // Allocate memory for the output arrays based on the count.
+        // Allocate memory for output arrays based on the count
         urls = new string[](count);
-        entityNumbers = new uint[](count);
-        ids = new uint[](count);
+        entityNumbers = new uint16[](count);
+        ids = new bytes32[](count);
 
-        // Populate the output arrays with data that meets the criteria.
-        uint index = 0;
-        for (uint i = 0; i < idsInGeohash.length && index < count; i++) {
-            uint currentId = idsInGeohash[i];
+        // Second pass: populate output arrays
+        uint16 index = 0;
+        for (uint16 i = 0; i < idsInGeohash.length && index < count; i++) {
+            bytes32 currentId = idsInGeohash[i];
             OIRData storage oir = idToData[currentId];
             
             if (meetsCriteria(oir, _minHeight, _maxHeight, _startTime, _endTime)) {
-                urls[index] = oir.resourceInfo.url;
-                entityNumbers[index] = oir.resourceInfo.entityNumber;
-                ids[index] = oir.resourceInfo.id;
+                urls[index] = oir.url;
+                entityNumbers[index] = oir.entityNumber;
+                ids[index] = oir.id;
                 index++;
             }
         }
@@ -470,10 +471,10 @@ contract DSS_Storage {
      * Both conditions must be true for the OIR to match.
      * 
      * @param _oir The OIRData structure to evaluate.
-     * @param _minHeight The minimum height of the query interval.
-     * @param _maxHeight The maximum height of the query interval.
-     * @param _startTime The start time of the query interval (UNIX timestamp).
-     * @param _endTime The end time of the query interval (UNIX timestamp).
+     * @param _minHeight The minimum height of the query interval (0 to 65,535).
+     * @param _maxHeight The maximum height of the query interval (0 to 65,535).
+     * @param _startTime The start time of the query interval in milliseconds (epoch, 0 to ~584 million years).
+     * @param _endTime The end time of the query interval in milliseconds (epoch, 0 to ~584 million years).
      * 
      * @return bool True if the OIR overlaps with both the height and time intervals.
      * 
@@ -481,13 +482,13 @@ contract DSS_Storage {
      */
     function meetsCriteria(
         OIRData memory _oir, 
-        uint _minHeight, 
-        uint _maxHeight, 
-        uint _startTime, 
-        uint _endTime
+        uint16 _minHeight, 
+        uint16 _maxHeight, 
+        uint64 _startTime, 
+        uint64 _endTime
     ) private pure returns (bool) {
-        return _oir.height.min <= _maxHeight && _oir.height.max >= _minHeight && 
-               _oir.time.start < _endTime && _oir.time.end > _startTime;
+        return _oir.minHeight <= _maxHeight && _oir.maxHeight >= _minHeight && 
+               _oir.startTime < _endTime && _oir.endTime > _startTime;
     }
     
 
