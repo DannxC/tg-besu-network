@@ -78,26 +78,50 @@ contract DSS_Storage {
         _;
     }
 
+    /// @dev Ensures that only the creator/owner of a specific OIR can modify it.
+    /// @param _id The ID of the OIR to check ownership for.
+    modifier onlyOIROwner(uint _id) {
+        require(idToData[_id].addedBy == msg.sender, "Not the owner of this OIR");
+        _;
+    }
+
 
     /* FUNCTIONS */
 
-    /// @dev Constructor sets the deployer as the owner and allows the owner to perform operations.
+    /**
+     * @dev Constructor that initializes the contract.
+     * Sets the deployer as the owner and adds them to the allowedUsers list.
+     * This ensures the deployer can immediately start adding OIRs.
+     */
     constructor() {
         owner = msg.sender;
         allowUser(owner);
     }
 
-    /// @dev Allows the owner to grant a user access to perform operations.
+    /**
+     * @dev Grants a user permission to add, update, and delete OIRs.
+     * @param _user The address to grant permissions to.
+     * @custom:modifier onlyOwner Only the contract owner can call this function.
+     */
     function allowUser(address _user) public onlyOwner {
         allowedUsers[_user] = true;
     }
 
-    /// @dev Allows the owner to revoke a user's access.
+    /**
+     * @dev Revokes a user's permission to interact with OIRs.
+     * @param _user The address to revoke permissions from.
+     * @custom:modifier onlyOwner Only the contract owner can call this function.
+     */
     function disallowUser(address _user) public onlyOwner {
         allowedUsers[_user] = false;
     }
 
-    /// @dev Transfers contract ownership to a new owner.
+    /**
+     * @dev Transfers contract ownership to a new address.
+     * The new owner will have full control over user permissions.
+     * @param _newOwner The address of the new owner.
+     * @custom:modifier onlyOwner Only the current owner can transfer ownership.
+     */
     function changeOwner(address _newOwner) public onlyOwner {
         owner = _newOwner;
     }
@@ -107,7 +131,32 @@ contract DSS_Storage {
 
     /**
      * @dev Adds or updates an OIR (Operational Intent Reference), represented as a set of geohashes.
-     * This function checks for existing data and updates or deletes as necessary.
+     * 
+     * This function performs intelligent upsert logic:
+     * - If the ID is new: inserts the OIR data into all specified geohashes.
+     * - If the ID exists: updates the OIR data and manages geohash associations.
+     *   - Geohashes that exist in both old and new lists are updated.
+     *   - New geohashes are added.
+     *   - Old geohashes not in the new list are removed.
+     * 
+     * Ownership is automatically checked for existing OIRs via the onlyOIROwner modifier.
+     * 
+     * @param _geohashes Array of geohash strings representing the spatial coverage of the OIR.
+     * @param _minHeight Minimum height/altitude in the vertical interval (e.g., meters).
+     * @param _maxHeight Maximum height/altitude in the vertical interval (e.g., meters).
+     * @param _startTime Start timestamp (UNIX time) of the temporal interval.
+     * @param _endTime End timestamp (UNIX time) of the temporal interval.
+     * @param _url URL pointing to detailed OIR information.
+     * @param _entity Entity number/identifier associated with this OIR.
+     * @param _id Unique identifier for this OIR (must be > 0).
+     * 
+     * @custom:modifier onlyAllowed Only allowed users can call this function.
+     * @custom:modifier onlyOIROwner (conditional) If ID exists, only the original creator can update it.
+     * 
+     * @custom:throws "No geohashes provided" if _geohashes array is empty.
+     * @custom:throws "Invalid height interval" if _maxHeight < _minHeight.
+     * @custom:throws "Invalid time interval" if _startTime >= _endTime.
+     * @custom:throws "Not the owner of this OIR" if trying to update someone else's OIR.
      */
     function upsertOIR (
         string[] memory _geohashes,
@@ -124,6 +173,11 @@ contract DSS_Storage {
         require(_geohashes.length > 0, "No geohashes provided");
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
+
+        // Check ownership if OIR already exists
+        if (idToGeohash[_id].length > 0) {
+            require(idToData[_id].addedBy == msg.sender, "Not the owner of this OIR");
+        }
 
         // Create a new OIRData object with the provided data.
         HeightInterval memory height = HeightInterval({min: _minHeight, max: _maxHeight});
@@ -178,10 +232,18 @@ contract DSS_Storage {
     /* INSERT */
 
     /**
-     * @dev Adds OIR data to a specific geohash. This function is called internally
-     * to add data without duplicating logic for single or batch insertions.
-     * @param _geohash The geohash representing the spatial location of the data.
-     * @param _oir The OIRData structure containing the data to be added.
+     * @dev Adds OIR data to a specific geohash. This is a private helper function.
+     * 
+     * This function performs three key operations:
+     * 1. Stores the OIRData in the idToData mapping (once per ID).
+     * 2. Adds the geohash to the list of geohashes for this ID.
+     * 3. Adds the ID to the list of IDs for this geohash.
+     * 
+     * @param _geohash The geohash string representing the spatial location.
+     * @param _oir The OIRData structure containing all data to be stored.
+     * 
+     * @custom:modifier onlyAllowed Only allowed users can trigger this (via upsertOIR).
+     * @custom:emits DataAdded Emitted when OIR is successfully added to a geohash.
      */
     function addOIRToGeohash(string memory _geohash, OIRData memory _oir) private onlyAllowed {
         uint currentId = _oir.resourceInfo.id;
@@ -203,10 +265,19 @@ contract DSS_Storage {
     /* UPDATE */
 
     /**
-     * @dev Updates the core data for a specific OIR identified by ID.
-     * Access is restricted to the data's original creator.
-     * @param _geohash The geohash of the OIR (used for event emission).
+     * @dev Updates the core data for a specific OIR. This is a private helper function.
+     * 
+     * Only updates the OIRData in the idToData mapping. The geohash associations
+     * are managed separately by the upsertOIR function.
+     * 
+     * @param _geohash The geohash string (used for event emission only).
      * @param _oir The new OIRData to replace the existing entry.
+     * 
+     * @custom:modifier onlyAllowed Only allowed users can trigger this (via upsertOIR).
+     * @custom:modifier onlyOIROwner (enforced in caller) Only the OIR creator can update.
+     * @custom:emits DataUpdated Emitted when OIR data is successfully updated.
+     * @custom:throws "No data to be updated for the given id" if ID doesn't exist.
+     * @custom:throws "Not the owner of this data" if caller is not the creator.
      */
     function updateOIRData(
         string memory _geohash, 
@@ -230,9 +301,23 @@ contract DSS_Storage {
     /* DELETE */
 
     /**
-     * @dev Deletes a batch of OIRs identified by their IDs. This function allows for efficient
-     * removal of multiple data entries and is accessible only to allowed users.
-     * @param _ids An array of IDs corresponding to the OIR entries to be deleted.
+     * @dev Deletes a batch of OIRs completely from the system.
+     * 
+     * This function removes all traces of the specified OIRs:
+     * - Removes the OIR from all associated geohashes.
+     * - Deletes the OIRData from idToData.
+     * - Clears the geohash list for each ID.
+     * 
+     * Ownership is automatically verified via the onlyOIROwner modifier.
+     * Only the original creator of each OIR can delete it.
+     * 
+     * @param _ids Array of OIR IDs to delete (must be owned by caller).
+     * 
+     * @custom:modifier onlyAllowed Only allowed users can call this function.
+     * @custom:modifier onlyOIROwner (per ID) Only the creator of each OIR can delete it.
+     * @custom:emits DataDeleted Emitted for each geohash from which the OIR is removed.
+     * @custom:throws "No ids provided" if _ids array is empty.
+     * @custom:throws "Not the owner of this data" if trying to delete someone else's OIR.
      */
     function deleteOIR(uint[] memory _ids) public onlyAllowed {
         require(_ids.length > 0, "No ids provided");
@@ -249,11 +334,21 @@ contract DSS_Storage {
     }
     
     /**
-     * @dev Removes a specific OIR from a given geohash mapping.
-     * This operation is restricted to the creator of the OIR. It updates both the
-     * geohash to ID mapping and the ID to geohash mapping to ensure data integrity.
+     * @dev Removes a specific OIR from a given geohash. This is a private helper function.
+     * 
+     * This function performs cleanup in both directions:
+     * 1. Removes the ID from the geohashToIds[geohash] array.
+     * 2. Removes the geohash from the idToGeohash[id] array.
+     * 3. If no more geohashes remain for this ID, deletes the OIRData entirely.
+     * 
+     * Uses the swap-and-pop pattern for efficient array element removal.
+     * 
      * @param _id The unique identifier of the OIR to be removed.
-     * @param _geohash The geohash string that the OIR is associated with.
+     * @param _geohash The geohash string from which to remove this OIR.
+     * 
+     * @custom:modifier onlyOIROwner (enforced in caller) Only the OIR creator can remove.
+     * @custom:emits DataDeleted Emitted when OIR is successfully removed from geohash.
+     * @custom:throws "Not the owner of this data" if caller is not the creator.
      */
     function removeOIRFromGeohash(uint _id, string memory _geohash) private {
         // Check ownership using the stored data
@@ -305,16 +400,31 @@ contract DSS_Storage {
     /* RETRIEVE */
 
     /**
-     * @dev Retrieves OIRs matching the specified criteria. This function allows users to query
-     * OIRs based on geohash, height interval, and time interval, facilitating efficient data lookup.
-     * @param _geohash The geohash to query.
-     * @param _minHeight The minimum height of the data.
-     * @param _maxHeight The maximum height of the data.
-     * @param _startTime The start time of the data interval.
-     * @param _endTime The end time of the data interval.
-     * @return urls An array of URLs for the matching OIRs.
-     * @return entityNumbers An array of entity numbers for the matching OIRs.
-     * @return ids An array of IDs for the matching OIRs.
+     * @dev Retrieves OIRs that match specific spatial and temporal criteria.
+     * 
+     * This function performs a two-step lookup:
+     * 1. Gets all IDs associated with the specified geohash.
+     * 2. Filters IDs based on height and time interval overlap.
+     * 
+     * The filtering uses interval overlap logic:
+     * - Height: OIR's [min, max] must overlap with query's [_minHeight, _maxHeight].
+     * - Time: OIR's [start, end] must overlap with query's [_startTime, _endTime].
+     * 
+     * @param _geohash The geohash string to query (e.g., "u4pruydqqvj").
+     * @param _minHeight Minimum height/altitude for filtering (inclusive).
+     * @param _maxHeight Maximum height/altitude for filtering (inclusive).
+     * @param _startTime Start timestamp for filtering (inclusive, UNIX time).
+     * @param _endTime End timestamp for filtering (exclusive, UNIX time).
+     * 
+     * @return urls Array of URLs for matching OIRs.
+     * @return entityNumbers Array of entity identifiers for matching OIRs.
+     * @return ids Array of OIR IDs that match all criteria.
+     * 
+     * @custom:throws "Invalid height interval" if _maxHeight < _minHeight.
+     * @custom:throws "Invalid time interval" if _startTime >= _endTime.
+     * 
+     * @custom:note This function is read-only (view) and can be called by anyone.
+     * @custom:note Returns empty arrays if no OIRs match the criteria.
      */
     function getOIRsByGeohash(
         string memory _geohash, 
@@ -363,17 +473,23 @@ contract DSS_Storage {
     }
 
     /**
-     * @dev Evaluates if a given OIR data meets specified criteria based on height and time intervals.
-     * This function is used to filter OIRs during data retrieval operations, ensuring that only
-     * data entries matching all criteria are selected.
+     * @dev Checks if an OIR meets filtering criteria using interval overlap logic.
+     * 
+     * Overlap conditions:
+     * - Height overlap: OIR.min <= query.max AND OIR.max >= query.min
+     * - Time overlap: OIR.start < query.end AND OIR.end > query.start
+     * 
+     * Both conditions must be true for the OIR to match.
      * 
      * @param _oir The OIRData structure to evaluate.
-     * @param _minHeight The minimum height value of the filtering criteria.
-     * @param _maxHeight The maximum height value of the filtering criteria.
-     * @param _startTime The start time value (inclusive) of the filtering criteria, represented as a UNIX timestamp.
-     * @param _endTime The end time value (exclusive) of the filtering criteria, represented as a UNIX timestamp.
+     * @param _minHeight The minimum height of the query interval.
+     * @param _maxHeight The maximum height of the query interval.
+     * @param _startTime The start time of the query interval (UNIX timestamp).
+     * @param _endTime The end time of the query interval (UNIX timestamp).
      * 
-     * @return bool Returns true if the OIR data satisfies all criteria; otherwise, returns false.
+     * @return bool True if the OIR overlaps with both the height and time intervals.
+     * 
+     * @custom:note This is a pure function - it doesn't read from storage.
      */
     function meetsCriteria(
         OIRData memory _oir, 

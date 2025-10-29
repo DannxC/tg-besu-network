@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomiclabs/hardhat-ethers";
+import "@typechain/hardhat";
 
 const { RPC_URL, CHAIN_ID, MEMBER1_PK, MEMBER2_PK, MEMBER3_PK } = process.env;
 
@@ -18,6 +19,10 @@ const config: HardhatUserConfig = {
       gasPrice: 0,
       accounts: accounts
     }
+  },
+  typechain: {
+    outDir: "typechain-types",
+    target: "ethers-v5",
   }
 };
 

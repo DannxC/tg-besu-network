@@ -34,6 +34,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["node_modules/**", "artifacts/**", "cache/**", "dist/**", "coverage/**", "eslint.config.ts"],
+    ignores: ["node_modules/**", "artifacts/**", "cache/**", "dist/**", "coverage/**", "typechain-types/**", "eslint.config.ts"],
   }
 );
