@@ -124,11 +124,36 @@ const server = http.createServer((req, res) => {
       try {
         const { imageData, filename } = JSON.parse(body);
         
-        // Remover o prefixo "data:image/png;base64,"
-        const base64Data = imageData.replace(/^data:image\/png;base64,/, '');
+        // Validar dados recebidos
+        if (!imageData || !filename) {
+          throw new Error('imageData ou filename ausente');
+        }
+        
+        // Remover o prefixo "data:image/jpeg;base64," ou "data:image/png;base64,"
+        const base64Data = imageData.replace(/^data:image\/(jpeg|png);base64,/, '');
+        
+        // Validar se é base64 válido
+        if (!base64Data || base64Data.length === 0) {
+          throw new Error('Dados base64 inválidos');
+        }
         
         // Criar buffer da imagem
         const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Validar tamanho mínimo
+        if (buffer.length < 1000) {
+          throw new Error(`Buffer muito pequeno: ${buffer.length} bytes`);
+        }
+        
+        // Validar assinatura JPEG (FF D8 FF) ou PNG (89 50 4E 47)
+        const jpegSignature = Buffer.from([0xFF, 0xD8, 0xFF]);
+        const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47]);
+        const isJPEG = buffer.slice(0, 3).equals(jpegSignature);
+        const isPNG = buffer.slice(0, 4).equals(pngSignature);
+        
+        if (!isJPEG && !isPNG) {
+          throw new Error('Arquivo não é um JPEG ou PNG válido');
+        }
         
         // Caminho para salvar
         const imagesDir = path.join(__dirname, 'images');
@@ -142,13 +167,21 @@ const server = http.createServer((req, res) => {
         // Salvar arquivo
         fs.writeFileSync(filePath, buffer);
         
+        // Verificar se arquivo foi salvo corretamente
+        const stats = fs.statSync(filePath);
+        
+        console.log(`✅ Imagem salva: ${filename} (${(stats.size / 1024).toFixed(2)} KB)`);
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
           success: true, 
           path: `dashboard/images/${filename}`,
-          message: `Imagem salva em: ${filePath}`
+          message: `Imagem salva em: ${filePath}`,
+          size: stats.size,
+          sizeKB: (stats.size / 1024).toFixed(2)
         }));
       } catch (error) {
+        console.error('❌ Erro ao salvar imagem:', (error as Error).message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
           success: false,

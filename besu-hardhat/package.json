@@ -7,6 +7,7 @@
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.ts --network besu",
     "interact": "hardhat run scripts/interact.ts --network besu",
+    "scenario": "hardhat run scripts/integration-scenario.ts --network besu",
     "dashboard": "npx hardhat run dashboard/server.ts --network besu",
     "dashboard:kill": "lsof -ti:3001 | xargs kill -9 2>/dev/null || true",
     "dashboard:restart": "npm run dashboard:kill && sleep 1 && npm run dashboard",

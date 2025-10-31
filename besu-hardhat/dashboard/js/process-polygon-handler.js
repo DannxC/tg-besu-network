@@ -1231,13 +1231,13 @@ async function downloadCanvas() {
   
   // Criar timestamp para nome do arquivo
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const filename = `besu-geohash-${timestamp}.png`;
+  const filename = `besu-geohash-${timestamp}.jpg`;
   
   addLogEntry(`📷 Gerando imagem...`, 'info');
   
   try {
-    // Converter canvas para base64
-    const imageData = canvas.toDataURL('image/png');
+    // Converter canvas para base64 JPEG (qualidade 90%)
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
     
     // Enviar para o servidor
     const response = await fetch('http://localhost:3001/api/save-canvas', {
@@ -1254,8 +1254,9 @@ async function downloadCanvas() {
     const result = await response.json();
     
     if (result.success) {
-      addLogEntry(`✅ Imagem salva em: ${result.path}`, 'success');
+      addLogEntry(`✅ Imagem salva: ${result.path} (${result.sizeKB} KB)`, 'success');
       console.log('📁 Caminho completo:', result.message);
+      console.log('📊 Tamanho:', result.sizeKB, 'KB');
     } else {
       addLogEntry(`❌ Erro ao salvar: ${result.error}`, 'error');
       console.error('Detalhes:', result.details);
