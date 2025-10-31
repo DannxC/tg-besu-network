@@ -202,7 +202,8 @@ contract DSS_Storage {
             }
         } else {
             // Complex case: manage existing geohashes
-            bytes32[] storage oldGeohashes = idToGeohash[_id]; // Storage pointer
+            // CRITICAL: Copy to memory first! Storage pointer would be modified during iteration
+            bytes32[] memory oldGeohashes = idToGeohash[_id]; // Memory copy (prevents mutation bugs)
             bool[] memory oldGeohashesProcessed = new bool[](oldGeohashes.length);
             
             // Process new geohashes: check if exists in old, then update or add
@@ -324,7 +325,8 @@ contract DSS_Storage {
         // Iterate through the provided IDs to delete the associated OIRs
         for (uint16 i = 0; i < _ids.length; i++) { // uint16 = 0 to 65,535 IDs per batch
             bytes32 currentId = _ids[i];
-            bytes32[] storage geohashes = idToGeohash[currentId]; // Storage pointer (no copy!)
+            // CRITICAL: Copy to memory first! Storage pointer would be modified during iteration
+            bytes32[] memory geohashes = idToGeohash[currentId]; // Memory copy (prevents mutation bugs)
 
             for (uint16 j = 0; j < geohashes.length; j++) {
                 removeOIRFromGeohash(currentId, geohashes[j]);
