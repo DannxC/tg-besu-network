@@ -1181,3 +1181,135 @@ input[type="range"]::-webkit-slider-thumb:hover {
     right: auto;
   }
 }
+
+/* Debug Info Panel */
+.debug-info-panel {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 280px;
+  max-height: 400px;
+  background: rgba(30, 30, 30, 0.95);
+  border: 2px solid #8b5cf6;
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+  font-size: 11px;
+  backdrop-filter: blur(10px);
+  cursor: move;
+  resize: both;
+  min-width: 200px;
+  min-height: 150px;
+}
+
+.debug-info-panel-content {
+  padding: 12px;
+  overflow-y: auto;
+  max-height: calc(100% - 40px);
+}
+
+.debug-info-header {
+  font-size: 13px;
+  font-weight: bold;
+  color: #8b5cf6;
+  padding: 10px 12px;
+  border-bottom: 2px solid #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  cursor: move;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.debug-panel-toggle {
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid #8b5cf6;
+  color: #8b5cf6;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.debug-panel-toggle:hover {
+  background: rgba(139, 92, 246, 0.4);
+  transform: scale(1.1);
+}
+
+.debug-info-panel.collapsed .debug-info-panel-content {
+  display: none;
+}
+
+.debug-info-panel.collapsed {
+  height: auto;
+  max-height: none;
+}
+
+.debug-info-section {
+  margin-bottom: 10px;
+}
+
+.debug-info-title {
+  font-size: 10px;
+  font-weight: bold;
+  color: #bbb;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.debug-info-content {
+  font-size: 10px;
+  color: #e0e0e0;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+.debug-info-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.debug-info-content table th,
+.debug-info-content table td {
+  padding: 3px 5px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 9px;
+}
+
+.debug-info-content table th {
+  color: #8b5cf6;
+  font-weight: bold;
+}
+
+.debug-info-content table tr:last-child td {
+  border-bottom: none;
+}
+
+.debug-info-content .stat-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.debug-info-content .stat-label {
+  color: #999;
+}
+
+.debug-info-content .stat-value {
+  color: #4CAF50;
+  font-weight: bold;
+}

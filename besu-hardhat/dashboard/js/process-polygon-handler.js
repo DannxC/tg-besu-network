@@ -33,8 +33,64 @@ function initProcessPolygonHandler() {
   // Setup event listeners
   setupPolygonControls();
   setupCanvasInteraction();
+  setupDebugPanelDrag();
   
   polygonState.initialized = true;
+}
+
+/**
+ * Setup drag para o painel de debug
+ */
+function setupDebugPanelDrag() {
+  const panel = document.getElementById('debug-info-panel');
+  const header = panel.querySelector('.debug-info-header');
+  const toggleBtn = document.getElementById('debug-panel-toggle');
+  
+  if (!panel || !header) return;
+  
+  let isDragging = false;
+  let currentX;
+  let currentY;
+  let initialX;
+  let initialY;
+  
+  header.style.cursor = 'move';
+  
+  header.addEventListener('mousedown', (e) => {
+    // Não arrastar se clicou no botão de toggle
+    if (e.target === toggleBtn || e.target.closest('#debug-panel-toggle')) {
+      return;
+    }
+    
+    isDragging = true;
+    initialX = e.clientX - panel.offsetLeft;
+    initialY = e.clientY - panel.offsetTop;
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    
+    e.preventDefault();
+    currentX = e.clientX - initialX;
+    currentY = e.clientY - initialY;
+    
+    panel.style.left = currentX + 'px';
+    panel.style.top = currentY + 'px';
+    panel.style.right = 'auto';
+  });
+  
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+  
+  // Botão de toggle (minimizar/expandir)
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.classList.toggle('collapsed');
+      toggleBtn.textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+    });
+  }
 }
 
 /**
@@ -272,10 +328,26 @@ async function processPolygon() {
     // Chamar função do contrato (é uma transação que retorna 5 valores)
     const tx = await contract.processPolygon(latitudes, longitudes, precision, labelsDebug);
     
-    addLogEntry('⏳ Aguardando confirmação da transação...', 'info');
+    addLogEntry(`⏳ Aguardando confirmação... TxHash: ${tx.hash}`, 'info');
+    console.log('📝 Transaction submitted:', { hash: tx.hash, from: tx.from, to: tx.to });
+    
     const receipt = await tx.wait();
     
-    addLogEntry(`✅ Transação confirmada! Block: ${receipt.blockNumber}, Gas: ${receipt.gasUsed.toString()}`, 'success');
+    const gasUsed = receipt.gasUsed.toString();
+    const gasUsedFormatted = parseInt(gasUsed).toLocaleString();
+    const gasLimit = tx.gasLimit ? tx.gasLimit.toString() : 'N/A';
+    const gasPercent = tx.gasLimit ? ((parseInt(gasUsed) / parseInt(gasLimit)) * 100).toFixed(2) : 'N/A';
+    
+    console.log('⛽ Gas Info:', { 
+      used: gasUsed, 
+      limit: gasLimit, 
+      percentage: gasPercent + '%',
+      block: receipt.blockNumber 
+    });
+    
+    addLogEntry(`✅ Transação confirmada!`, 'success');
+    addLogEntry(`   📊 Block: ${receipt.blockNumber} | Gas: ${gasUsedFormatted}`, 'info');
+    addLogEntry(`   🔗 TxHash: ${receipt.transactionHash}`, 'info');
     
     // Extrair resultados do retorno
     // processPolygon sempre retorna 5 valores: (result, debugInfo, labelEquivalencies, totalLabels, bbox)
@@ -309,6 +381,9 @@ async function processPolygon() {
     
     // Atualizar UI
     showTestStatus(`✅ ${polygonState.geohashResults.length} geohashes processados`, 'success');
+    
+    // Atualizar painel de debug
+    updateDebugInfoPanel();
     
     // Renderizar resultados no canvas
     renderPolygonState();
@@ -379,6 +454,9 @@ function clearPolygon() {
   
   // Limpar coordenadas snap
   updateSnapCoords(null, null);
+  
+  // Esconder painel de debug
+  updateDebugInfoPanel();
   
   // Resetar seletor de input mode
   const inputModeSelect = document.getElementById('polygon-input-mode-select');
@@ -462,7 +540,91 @@ function renderPolygonState() {
   // IMPORTANTE: Garantir que o lineDash está resetado após drawGrid
   ctx.setLineDash([]);
   
-  // 1. Desenhar geohashes retornados (se houver)
+  // 1. Desenhar bounding box geohashes (se houver debug info)
+  if (polygonState.debugInfo && polygonState.debugInfo.bbox) {
+    ctx.save();
+    ctx.setLineDash([]);
+    
+    const bbox = polygonState.debugInfo.bbox;
+    const cellSize = GeohashUtils.getCellSize(precision);
+    
+    // Desenhar os 3 geohashes da bounding box com hachura
+    // bbox.geohashes[0] = bottom-left (minLat, minLon)
+    // bbox.geohashes[1] = top-left (maxLat, minLon)
+    // bbox.geohashes[2] = top-right (maxLat, maxLon)
+    if (bbox.geohashes && bbox.geohashes.length >= 3) {
+      bbox.geohashes.forEach((geohash, idx) => {
+        const zOrderIndex = bytes32ToZOrderIndex(geohash, precision);
+        const { gridX, gridY } = zOrderToGrid(zOrderIndex, precision);
+        const x = gridX * cellSize.width;
+        const y = gridY * cellSize.height;
+        
+        // Salvar contexto para clipping
+        ctx.save();
+        
+        // Criar clipping path para conter a hachura dentro da célula
+        ctx.beginPath();
+        ctx.rect(x, y, cellSize.width, cellSize.height);
+        ctx.clip();
+        
+        // Desenhar hachura (linhas diagonais) DENTRO da célula
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.5)'; // Azul claro
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        
+        // Hachura diagonal
+        const spacing = 6;
+        const diagonal = cellSize.width + cellSize.height;
+        for (let i = -cellSize.height; i < diagonal; i += spacing) {
+          ctx.beginPath();
+          ctx.moveTo(x + i, y);
+          ctx.lineTo(x + i + cellSize.height, y + cellSize.height);
+          ctx.stroke();
+        }
+        
+        ctx.restore(); // Restaurar antes do clipping
+        
+        // Borda do geohash
+        ctx.strokeStyle = 'rgba(33, 150, 243, 1)'; // Azul forte
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, cellSize.width, cellSize.height);
+        
+        // Label (0, 1, 2)
+        ctx.fillStyle = 'rgba(33, 150, 243, 1)';
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText(`BB${idx}`, x + 3, y + 12);
+      });
+    }
+    
+    // Desenhar retângulo da bounding box completa
+    const topLeft = GeohashUtils.latLonToCanvas(
+      Number(bbox.maxLat) / 1e18,
+      Number(bbox.minLon) / 1e18
+    );
+    const bottomRight = GeohashUtils.latLonToCanvas(
+      Number(bbox.minLat) / 1e18,
+      Number(bbox.maxLon) / 1e18
+    );
+    
+    const bboxWidth = bottomRight.x - topLeft.x;
+    const bboxHeight = bottomRight.y - topLeft.y;
+    
+    // Borda sólida da bounding box (azul)
+    ctx.strokeStyle = 'rgba(33, 150, 243, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeRect(topLeft.x, topLeft.y, bboxWidth, bboxHeight);
+    
+    // Label "BBox"
+    ctx.fillStyle = 'rgba(33, 150, 243, 1)';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText('BBox', topLeft.x + 4, topLeft.y - 4);
+    
+    ctx.restore();
+    ctx.setLineDash([]);
+  }
+  
+  // 2. Desenhar geohashes retornados (se houver)
   if (polygonState.geohashResults.length > 0) {
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -484,7 +646,7 @@ function renderPolygonState() {
     ctx.setLineDash([]); // Garantir linha sólida após restore
   }
   
-  // 1.5. Desenhar labels de debug (se houver)
+  // 3. Desenhar labels de debug (se houver)
   if (polygonState.debugInfo) {
     ctx.save();
     ctx.setLineDash([]); // Garantir linha sólida
@@ -526,7 +688,7 @@ function renderPolygonState() {
     ctx.setLineDash([]); // Garantir linha sólida após restore
   }
   
-  // 2. Desenhar linhas entre os pontos (CHEIAS entre pontos, TRACEJADA até red dot)
+  // 4. Desenhar linhas entre os pontos (CHEIAS entre pontos, TRACEJADA até red dot)
   if (polygonState.points.length > 0) {
     ctx.save();
     
@@ -597,7 +759,7 @@ function renderPolygonState() {
     ctx.setLineDash([]); // RESETAR linha para sólida após restore
   }
   
-  // 3. Desenhar pontos do polígono (AMARELO com borda PRETA e números)
+  // 5. Desenhar pontos do polígono (AMARELO com borda PRETA e números)
   ctx.setLineDash([]); // Garantir linha sólida antes de desenhar círculos
   
   polygonState.points.forEach((point, index) => {
@@ -760,6 +922,168 @@ function updateSnapCoords(lat, lon) {
     snapCoords.style.display = 'block';
     snapLat.textContent = lat.toFixed(4) + '°';
     snapLon.textContent = lon.toFixed(4) + '°';
+  }
+}
+
+/**
+ * Atualiza o painel de debug info
+ */
+function updateDebugInfoPanel() {
+  const panel = document.getElementById('debug-info-panel');
+  const bboxInfo = document.getElementById('debug-bbox-info');
+  const equivalenciesTable = document.getElementById('debug-equivalencies-table');
+  const statsInfo = document.getElementById('debug-stats');
+  
+  if (!panel || !bboxInfo || !equivalenciesTable || !statsInfo) return;
+  
+  // Se não houver debug info, esconder o painel
+  if (!polygonState.debugInfo) {
+    panel.style.display = 'none';
+    return;
+  }
+  
+  // Mostrar painel
+  panel.style.display = 'block';
+  
+  // 1. Bounding Box Info
+  const bbox = polygonState.debugInfo.bbox;
+  if (bbox) {
+    const minLat = (Number(bbox.minLat) / 1e18).toFixed(4);
+    const maxLat = (Number(bbox.maxLat) / 1e18).toFixed(4);
+    const minLon = (Number(bbox.minLon) / 1e18).toFixed(4);
+    const maxLon = (Number(bbox.maxLon) / 1e18).toFixed(4);
+    
+    bboxInfo.innerHTML = `
+      <div class="stat-line">
+        <span class="stat-label">Width:</span>
+        <span class="stat-value">${bbox.width.toString()}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Height:</span>
+        <span class="stat-value">${bbox.height.toString()}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Min Lat:</span>
+        <span class="stat-value">${minLat}°</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Max Lat:</span>
+        <span class="stat-value">${maxLat}°</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Min Lon:</span>
+        <span class="stat-value">${minLon}°</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Max Lon:</span>
+        <span class="stat-value">${maxLon}°</span>
+      </div>
+    `;
+  }
+  
+  // 2. Label Equivalencies Table - Mostrar ANTES e DEPOIS
+  const equivalencies = polygonState.debugInfo.equivalencies;
+  const debugInfoArray = polygonState.debugInfo.info;
+  
+  if (equivalencies && equivalencies.length > 0 && debugInfoArray && debugInfoArray.length > 0) {
+    // Criar mapa de labels originais → finais para mostrar quais foram usados
+    const usedLabels = new Set();
+    debugInfoArray.forEach(info => {
+      if (info.label > 0) { // Ignorar label 0 (externo)
+        usedLabels.add(info.label);
+      }
+    });
+    
+    let tableHTML = '<table><thead><tr><th>Label</th><th>→ Final</th><th>Status</th></tr></thead><tbody>';
+    
+    // Mostrar apenas labels que foram realmente usados
+    const sortedLabels = Array.from(usedLabels).sort((a, b) => a - b);
+    const maxShow = 15;
+    
+    for (let i = 0; i < sortedLabels.length && i < maxShow; i++) {
+      const label = sortedLabels[i];
+      const finalLabel = equivalencies[label].toString();
+      const changed = label !== parseInt(finalLabel);
+      const statusIcon = changed ? '🔄' : '✓';
+      const statusColor = changed ? '#FFA726' : '#4CAF50';
+      
+      tableHTML += `<tr>
+        <td>${label}</td>
+        <td>${finalLabel}</td>
+        <td style="color: ${statusColor};">${statusIcon}</td>
+      </tr>`;
+    }
+    
+    if (sortedLabels.length > maxShow) {
+      tableHTML += `<tr><td colspan="3" style="text-align: center; color: #888;">... +${sortedLabels.length - maxShow} labels</td></tr>`;
+    }
+    
+    tableHTML += '</tbody></table>';
+    equivalenciesTable.innerHTML = tableHTML;
+  } else {
+    equivalenciesTable.innerHTML = '<div style="color: #888;">No equivalencies</div>';
+  }
+  
+  // 3. Geohash Stats
+  const debugInfo = polygonState.debugInfo.info;
+  if (debugInfo && debugInfo.length > 0) {
+    let edgeCount = 0;
+    let fillCount = 0;
+    let internalCount = 0;
+    let externalCount = 0;
+    
+    // Contar labels únicos (antes da equivalência)
+    const uniqueOriginalLabels = new Set();
+    const uniqueFinalLabels = new Set();
+    
+    debugInfo.forEach(info => {
+      if (info.isEdge) edgeCount++;
+      else fillCount++;
+      
+      if (info.isInternal) internalCount++;
+      else externalCount++;
+      
+      if (info.label > 0) uniqueOriginalLabels.add(info.label);
+      if (info.finalLabel > 0) uniqueFinalLabels.add(info.finalLabel);
+    });
+    
+    // Calcular quantos labels foram mesclados
+    const mergedLabels = uniqueOriginalLabels.size - uniqueFinalLabels.size;
+    
+    statsInfo.innerHTML = `
+      <div class="stat-line">
+        <span class="stat-label">Total Geohashes:</span>
+        <span class="stat-value">${debugInfo.length}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">↳ From rasterizeEdge:</span>
+        <span class="stat-value" style="color: #2196F3;">${edgeCount}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">↳ From fillPolygon:</span>
+        <span class="stat-value" style="color: #9C27B0;">${fillCount}</span>
+      </div>
+      <div class="stat-line" style="margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+        <span class="stat-label">Internal:</span>
+        <span class="stat-value" style="color: #4CAF50;">${internalCount}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">External/Edge:</span>
+        <span class="stat-value" style="color: #FF5722;">${externalCount}</span>
+      </div>
+      <div class="stat-line" style="margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+        <span class="stat-label">Labels (original):</span>
+        <span class="stat-value">${uniqueOriginalLabels.size}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">Labels (final):</span>
+        <span class="stat-value" style="color: #4CAF50;">${uniqueFinalLabels.size}</span>
+      </div>
+      <div class="stat-line">
+        <span class="stat-label">↳ Merged:</span>
+        <span class="stat-value" style="color: #FFA726;">${mergedLabels}</span>
+      </div>
+    `;
   }
 }
 

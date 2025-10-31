@@ -103,6 +103,31 @@
       </button>
     </div>
     
+    <!-- Painel de Debug Info (canto superior direito acima do canvas) -->
+    <div id="debug-info-panel" class="debug-info-panel" style="display: none;">
+      <div class="debug-info-header">
+        <span>🔍 Debug Info</span>
+        <button id="debug-panel-toggle" class="debug-panel-toggle">▼</button>
+      </div>
+      
+      <div class="debug-info-panel-content">
+        <div class="debug-info-section">
+          <div class="debug-info-title">📦 Bounding Box</div>
+          <div id="debug-bbox-info" class="debug-info-content">-</div>
+        </div>
+        
+        <div class="debug-info-section">
+          <div class="debug-info-title">🏷️ Label Equivalencies</div>
+          <div id="debug-equivalencies-table" class="debug-info-content">-</div>
+        </div>
+        
+        <div class="debug-info-section">
+          <div class="debug-info-title">📊 Geohash Stats</div>
+          <div id="debug-stats" class="debug-info-content">-</div>
+        </div>
+      </div>
+    </div>
+    
     <canvas id="canvas" width="900" height="600"></canvas>
     
     <!-- Botões flutuantes removidos (botão Limpar já existe nos controles do polygon) -->

@@ -427,11 +427,11 @@ contract GeohashConverter {
         bytes32 currentGeohash = bbox.geohashes[0];
         while (currentGeohash != bbox.geohashes[1]) {
             currentGeohash = singleMoveGeohash(currentGeohash, precision, Direction.Up);
-            bbox.width++;
+            bbox.height++;  // Direction.Up aumenta LATITUDE (vertical = height)
         }
         while (currentGeohash != bbox.geohashes[2]) {
             currentGeohash = singleMoveGeohash(currentGeohash, precision, Direction.Right);
-            bbox.height++;
+            bbox.width++;   // Direction.Right aumenta LONGITUDE (horizontal = width)
         }
 
         return bbox;
@@ -745,7 +745,12 @@ contract GeohashConverter {
             
             // Atualizar debugInfo com labels finais e status
             for (i = 0; i < tempDebugInfo.length; i++) {
-                tempDebugInfo[i].finalLabel = labelEquivalencyList[tempDebugInfo[i].label];
+                // Validar se o label está dentro dos limites
+                if (tempDebugInfo[i].label < labelEquivalencyList.length) {
+                    tempDebugInfo[i].finalLabel = labelEquivalencyList[tempDebugInfo[i].label];
+                } else {
+                    tempDebugInfo[i].finalLabel = tempDebugInfo[i].label; // Fallback: usar o próprio label
+                }
                 tempDebugInfo[i].isInternal = geohashMap[tempDebugInfo[i].geohash];
             }
         }
