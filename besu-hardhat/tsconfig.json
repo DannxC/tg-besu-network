@@ -13,6 +13,6 @@
     "noEmit": true,
     "types": ["mocha", "node"]
   },
-  "include": ["scripts/**/*", "contracts/**/*", "utils/**/*", "tests/**/*", "hardhat.config.ts", "hardhat-env.d.ts"],
-  "exclude": ["node_modules/**/*", "artifacts", "cache", "eslint.config.ts", "utils/test-network.ts"]
+  "include": ["scripts/**/*", "contracts/**/*", "utils/**/*", "tests/**/*", "dashboard/**/*", "hardhat.config.ts", "hardhat-env.d.ts"],
+  "exclude": ["node_modules/**/*", "artifacts", "cache", "eslint.config.ts", "utils/test-network.ts", "dashboard/js/**/*"]
 }

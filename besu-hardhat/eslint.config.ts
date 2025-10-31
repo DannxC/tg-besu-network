@@ -24,6 +24,28 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    files: ["dashboard/js/**/*.js"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        ethers: "readonly",
+        GeohashUtils: "readonly",
+        GeohashGrid: "readonly",
+        GeohashContract: "readonly",
+        TestHandler: "readonly",
+        appState: "readonly",
+      },
+    },
+    rules: {
+      "no-console": "off",
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    },
+  },
+  {
     files: ["tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-unused-expressions": "off",

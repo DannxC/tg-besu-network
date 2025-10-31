@@ -1,0 +1,25 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 12,
+    "sourceType": "script"
+  },
+  "globals": {
+    "GeohashUtils": "readonly",
+    "GeohashGrid": "readonly",
+    "GeohashContract": "readonly",
+    "TestHandler": "readonly",
+    "appState": "readonly",
+    "ethers": "readonly",
+    "fetch": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "no-console": "off"
+  }
+}
+

@@ -243,7 +243,7 @@ contract GeohashConverter {
         return dX * dX + dY * dY;
     }
 
-    // Math step function to round to teh ground integer miltiple of stepSize
+    // Math step function to round to the ground integer multiple of stepSize
     function stepFunction(int256 x, int256 stepSize) public pure returns (int256) {
         require(stepSize > 0, "Step size must be greater than 0");
         if (x >= 0) {
@@ -384,7 +384,7 @@ contract GeohashConverter {
 
     // Helper functions such as converting (x, y) coordinates to grid cells, identifying unique geohashes, etc., can be added as needed
     // Auxiliar function to compute bounding box of the polygon
-    function computeBoundingBox(int256[] memory latitudes, int256[] memory longitudes, uint8 precision) private view returns (BoundingBox memory) {
+    function computeBoundingBox(int256[] memory latitudes, int256[] memory longitudes, uint8 precision) public view returns (BoundingBox memory) {
         require(latitudes.length == longitudes.length && latitudes.length > 0, "Arrays must be of equal length and non-empty");
 
         BoundingBox memory bbox = BoundingBox({

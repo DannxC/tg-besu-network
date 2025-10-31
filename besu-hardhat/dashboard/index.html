@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeohashConverter Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Sidebar com controles -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h1>🗺️ Geohash</h1>
+      <button id="settings-btn" class="icon-btn" title="Configurações">⚙️</button>
+    </div>
+    
+    <!-- Accordion: Contrato -->
+    <div class="accordion-item">
+      <button class="accordion-header active" data-section="contract">
+        <span>📋 Contrato</span>
+        <span class="accordion-icon">▼</span>
+      </button>
+      <div class="accordion-content active" id="contract-section">
+        <div class="info-row">
+          <span class="info-label">Address:</span>
+          <span class="info-value" id="contract-address">Carregando...</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Max Precision:</span>
+          <span class="info-value" id="contract-precision">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Network:</span>
+          <span class="info-value" id="contract-network">-</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Accordion: Grid Info -->
+    <div class="accordion-item">
+      <button class="accordion-header active" data-section="grid">
+        <span>📐 Grid Info</span>
+        <span class="accordion-icon">▼</span>
+      </button>
+      <div class="accordion-content active" id="grid-section">
+        <div class="info-row">
+          <span class="info-label">Precision:</span>
+          <span class="info-value" id="current-precision">4</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Tamanho do grid:</span>
+          <span class="info-value" id="grid-count">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Tamanho da célula:</span>
+          <span class="info-value" id="cell-size">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Total de células:</span>
+          <span class="info-value" id="total-cells">-</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Accordion: Log -->
+    <div class="accordion-item">
+      <button class="accordion-header active" data-section="log">
+        <span>📝 Log</span>
+        <span class="accordion-icon">▼</span>
+      </button>
+      <div class="accordion-content active" id="log-section">
+        <div id="log">
+          <div class="log-entry log-info">Aguardando inicialização...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Área do canvas -->
+  <div id="canvas-container">
+    <!-- Tabs de teste -->
+    <div class="test-tabs">
+      <button class="tab-btn active" data-tab="latlon-to-geohash">
+        📍 Lat/Lon → Geohash
+      </button>
+      <button class="tab-btn" data-tab="geohash-to-latlon">
+        🗺️ Geohash → Lat/Lon
+      </button>
+      <button class="tab-btn" data-tab="move-geohash">
+        ➡️ Move Geohash
+      </button>
+      <button class="tab-btn" data-tab="bounding-box">
+        📦 Bounding Box
+      </button>
+      <button class="tab-btn" data-tab="rasterize-edge">
+        📏 Rasterize Edge
+      </button>
+    </div>
+    
+    <canvas id="canvas" width="900" height="600"></canvas>
+    
+    <!-- Botão de refresh flutuante -->
+    <button id="refresh-btn" class="floating-btn" title="Atualizar Grid">🔄</button>
+    
+    <!-- Botão de reset do teste -->
+    <button id="reset-test-btn" class="floating-btn reset-btn" title="Resetar Teste">🗑️</button>
+
+    <!-- Rodapé estruturado -->
+    <div id="footer" class="footer">
+      <!-- Esquerda: Status/mensagens -->
+      <div class="footer-left">
+        <!-- Status do teste -->
+        <div id="test-status" class="test-status">
+          <span id="status-text">Clique no grid para testar</span>
+        </div>
+      </div>
+
+      <!-- Centro: Coordenadas do ponto -->
+      <div class="footer-center">
+        <div id="snap-coords" style="display: none;">
+          <span class="coord-label">Lat:</span>
+          <span id="snap-lat">-</span>
+          <span class="coord-label">Lon:</span>
+          <span id="snap-lon">-</span>
+        </div>
+      </div>
+
+      <!-- Direita: Controles de input -->
+      <div class="footer-right">
+        <!-- Controles de input para Lat/Lon → Geohash -->
+        <div id="input-controls-latlon" class="input-controls" style="display: none;">
+          <select id="input-mode-select-latlon">
+            <option value="click">🖱️ Click</option>
+            <option value="manual">⌨️ Manual</option>
+          </select>
+
+          <div id="manual-input-form-latlon" style="display: none;">
+            <input type="number" id="manual-lat" placeholder="Latitude" step="0.0001">
+            <input type="number" id="manual-lon" placeholder="Longitude" step="0.0001">
+            <button id="manual-submit-btn-latlon">✓</button>
+          </div>
+        </div>
+
+        <!-- Controles de input para Geohash → Lat/Lon -->
+        <div id="input-controls-geohash" class="input-controls" style="display: none;">
+          <select id="input-mode-select-geohash">
+            <option value="click">🖱️ Click</option>
+            <option value="manual">⌨️ Manual</option>
+          </select>
+
+          <div id="manual-input-form-geohash" style="display: none;">
+            <input type="text" id="manual-geohash" placeholder="Geohash (ex: ff, 3d)" maxlength="16">
+            <button id="manual-submit-btn-geohash">✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Controles direcionais para Move Geohash -->
+    <div id="direction-controls" class="direction-controls" style="display: none;">
+      <div class="direction-grid">
+        <div></div>
+        <button id="btn-up" class="direction-btn" data-direction="up" title="Mover para cima">⬆️</button>
+        <div></div>
+        <button id="btn-left" class="direction-btn" data-direction="left" title="Mover para esquerda">⬅️</button>
+        <div class="direction-center">
+          <span id="current-geohash-display">-</span>
+        </div>
+        <button id="btn-right" class="direction-btn" data-direction="right" title="Mover para direita">➡️</button>
+        <div></div>
+        <button id="btn-down" class="direction-btn" data-direction="down" title="Mover para baixo">⬇️</button>
+        <div></div>
+      </div>
+    </div>
+    
+    <!-- Controles para Bounding Box -->
+    <div id="bbox-controls" class="bbox-controls" style="display: none;">
+      <div class="bbox-header">
+        <span class="bbox-title">Pontos do Polígono (mín: 3)</span>
+        <select id="bbox-input-mode-select">
+          <option value="manual">⌨️ Manual</option>
+          <option value="click">🖱️ Click</option>
+        </select>
+      </div>
+
+      <div id="bbox-points-list" class="bbox-points-list" style="display: block;">
+        <!-- Pontos serão adicionados dinamicamente aqui -->
+      </div>
+
+      <div class="bbox-actions">
+        <button id="bbox-compute" class="bbox-btn bbox-compute">📦 Calcular BBox</button>
+        <button id="bbox-clear" class="bbox-btn bbox-clear">🗑️ Limpar</button>
+      </div>
+    </div>
+
+    
+  </div>
+  
+  <!-- Modal de Configurações -->
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>⚙️ Configurações</h2>
+        <button id="close-modal" class="close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label for="precision-input">Precision (2-16, pares apenas)</label>
+          <div class="precision-control">
+            <input 
+              type="range" 
+              id="precision-input" 
+              min="2" 
+              max="16" 
+              step="2" 
+              value="4"
+            >
+            <span id="precision-value" class="precision-badge">4</span>
+          </div>
+          <p class="setting-hint">Define a granularidade do grid de geohashes</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="apply-settings" class="btn-primary">Aplicar</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Scripts -->
+  <!-- Debug script -->
+  <script>
+    console.log('=== DASHBOARD DEBUG START ===');
+    let errorCount = 0;
+    const MAX_ERRORS = 10; // Limitar erros para evitar loops
+    
+    window.addEventListener('error', function(e) {
+      errorCount++;
+      if (errorCount <= MAX_ERRORS) {
+        console.error('GLOBAL ERROR:', e.message, e.filename, e.lineno, e.colno);
+      } else if (errorCount === MAX_ERRORS + 1) {
+        console.error('⚠️ Muitos erros detectados. Silenciando logs para evitar spam...');
+      }
+      // Prevenir comportamento padrão que pode causar loops
+      e.preventDefault();
+      return false;
+    });
+    
+    // Prevenir unhandled promise rejections que podem causar loops
+    window.addEventListener('unhandledrejection', function(e) {
+      errorCount++;
+      if (errorCount <= MAX_ERRORS) {
+        console.error('UNHANDLED PROMISE REJECTION:', e.reason);
+      }
+      e.preventDefault();
+    });
+  </script>
+  
+  <!-- Ethers.js local (do Hardhat) -->
+  <script 
+    src="/ethers.umd.min.js"
+    onload="console.log('✅ Ethers.js carregado:', typeof ethers)"
+    onerror="console.error('❌ Falha ao carregar ethers.js')">
+  </script>
+  
+  <script src="js/utils.js" onerror="alert('Failed to load utils.js')"></script>
+  <script src="js/grid.js" onerror="alert('Failed to load grid.js')"></script>
+  <script src="js/contract.js" onerror="alert('Failed to load contract.js')"></script>
+  <script src="js/test-handler.js" onerror="alert('Failed to load test-handler.js')"></script>
+  <script src="js/main.js" onerror="alert('Failed to load main.js')"></script>
+  
+  <script>
+    console.log('All scripts loaded. Checking globals...');
+    console.log('GeohashUtils:', typeof GeohashUtils);
+    console.log('GeohashGrid:', typeof GeohashGrid);
+    console.log('GeohashContract:', typeof GeohashContract);
+    console.log('TestHandler:', typeof TestHandler);
+    console.log('ethers:', typeof ethers);
+  </script>
+</body>
+</html>
+
