@@ -25,18 +25,14 @@ const polygonState = {
  */
 function initProcessPolygonHandler() {
   if (polygonState.initialized) {
-    console.log('ProcessPolygon handler já inicializado');
     return;
   }
-  
-  console.log('Inicializando ProcessPolygon handler...');
   
   // Setup event listeners
   setupPolygonControls();
   setupCanvasInteraction();
   
   polygonState.initialized = true;
-  console.log('ProcessPolygon handler inicializado!');
 }
 
 /**
@@ -74,6 +70,17 @@ function setupPolygonControls() {
   const clearBtn = document.getElementById('polygon-clear-btn');
   if (clearBtn) {
     clearBtn.addEventListener('click', clearPolygon);
+  }
+  
+  // Botão de toggle (minimizar/maximizar)
+  const toggleBtn = document.getElementById('polygon-toggle-btn');
+  const polygonControls = document.getElementById('polygon-controls');
+  if (toggleBtn && polygonControls) {
+    toggleBtn.addEventListener('click', () => {
+      polygonControls.classList.toggle('minimized');
+      toggleBtn.classList.toggle('rotated');
+      toggleBtn.textContent = polygonControls.classList.contains('minimized') ? '▲' : '▼';
+    });
   }
 }
 
@@ -248,12 +255,19 @@ async function processPolygon() {
       longitudes.push(lonScaled);
     }
     
-    addLogEntry(`📡 Chamando processPolygon com ${polygonState.points.length} pontos (precision=${precision})...`, 'info');
+    // Verificar se estamos em modo debug (somente bordas)
+    const edgesOnlyCheckbox = document.getElementById('polygon-edges-only-checkbox');
+    const edgesOnly = edgesOnlyCheckbox ? edgesOnlyCheckbox.checked : false;
+    
+    const functionName = edgesOnly ? 'processPolygonEdgesOnly' : 'processPolygon';
+    const functionLabel = edgesOnly ? '🐛 DEBUG: Somente bordas' : 'processPolygon (bordas + preenchimento)';
+    
+    addLogEntry(`📡 Chamando ${functionLabel} com ${polygonState.points.length} pontos (precision=${precision})...`, 'info');
     addLogEntry(`ℹ️ Contrato fecha o polígono automaticamente (${polygonState.points.length} → 1)`, 'info');
-    console.log('Chamando processPolygon:', { latitudes, longitudes, precision });
+    console.log(`Chamando ${functionName}:`, { latitudes, longitudes, precision });
     
     // Chamar função do contrato (é uma transação que retorna array)
-    const tx = await contract.processPolygon(latitudes, longitudes, precision);
+    const tx = await contract[functionName](latitudes, longitudes, precision);
     
     addLogEntry('⏳ Aguardando confirmação da transação...', 'info');
     const receipt = await tx.wait();
@@ -263,7 +277,7 @@ async function processPolygon() {
     // Extrair geohashes do resultado
     // Como processPolygon retorna bytes32[], precisamos decodificar os eventos ou fazer uma chamada view
     // Vamos fazer uma chamada callStatic para obter o retorno
-    const geohashes = await contract.callStatic.processPolygon(latitudes, longitudes, precision);
+    const geohashes = await contract.callStatic[functionName](latitudes, longitudes, precision);
     
     addLogEntry(`🎉 Processamento concluído! ${geohashes.length} geohashes retornados`, 'success');
     console.log('Geohashes retornados:', geohashes);

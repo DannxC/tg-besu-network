@@ -39,10 +39,10 @@ async function main() {
   // Deploy GeohashConverter
   // ========================================
   console.log("\n🚀 Iniciando deploy do contrato GeohashConverter...");
-  console.log("⚙️  Configurando precision = 8 (área ~7781.98 km² por geohash)");
+  console.log("⚙️  Configurando precision = 4 (área ~124512.23 km² por geohash)");
   
   const GeohashConverter = await ethers.getContractFactory("GeohashConverter");
-  const geohashContract = await GeohashConverter.deploy(8); // Precision 8
+  const geohashContract = await GeohashConverter.deploy(4); // Precision 4
   
   console.log("⏳ Aguardando confirmação...");
   await geohashContract.deployed();
@@ -89,7 +89,7 @@ async function main() {
     gasUsed: geohashReceipt.gasUsed.toString(),
     network: networkName,
     chainId: network.chainId,
-    precision: 8
+    precision: 4
   };
   fs.writeFileSync(geohashDeploymentFile, JSON.stringify(geohashDeploymentData, null, 2));
   
@@ -100,7 +100,7 @@ async function main() {
   console.log("\n💡 Resumo:");
   console.log("  Owner inicial:", deployer.address);
   console.log("  DSS_Storage:", dssContract.address);
-  console.log("  GeohashConverter:", geohashContract.address, "(precision: 8)");
+  console.log("  GeohashConverter:", geohashContract.address, "(precision: 4)");
   console.log("\n💡 Para testar:");
   console.log("  npm run test:dss");
   console.log("  npm run geohash:visual (testador visual interativo)");

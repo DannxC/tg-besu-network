@@ -17,13 +17,11 @@ let contractLoading = false; // Flag para evitar carregamento simultâneo
 async function loadContract() {
   // Se já está carregado, retornar cache
   if (contractInfo && contractInstance) {
-    console.log('✅ Contrato já carregado, retornando cache');
     return contractInfo;
   }
   
   // Se já está carregando, aguardar
   if (contractLoading) {
-    console.log('⏳ Contrato já está sendo carregado, aguardando...');
     // Aguardar até que termine (polling simples)
     let attempts = 0;
     while (contractLoading && attempts < 50) { // Máximo 5 segundos
@@ -54,7 +52,7 @@ async function loadContract() {
     }
     
     contractInfo = data;
-    console.log('Contrato carregado:', contractInfo);
+    console.log('✅ Contrato carregado:', contractInfo);
     
     // Inicializar ethers.js provider e contract instance
     await initializeEthers();
@@ -62,7 +60,7 @@ async function loadContract() {
     return contractInfo;
     
   } catch (error) {
-    console.error('Erro ao carregar contrato:', error);
+    console.error('❌ Erro ao carregar contrato:', error);
     throw error;
   } finally {
     contractLoading = false;
@@ -75,7 +73,6 @@ async function loadContract() {
 async function initializeEthers() {
   // Evitar inicialização duplicada
   if (ethersInitialized && contractInstance) {
-    console.log('✅ Ethers já inicializado, reutilizando instância existente');
     return;
   }
   
@@ -85,7 +82,6 @@ async function initializeEthers() {
     }
     
     ethersInitialized = true;
-    console.log('🔍 [RPC] Inicializando ethers.js...');
     
     // Criar provider apontando para a rede Besu
     // OBS: contractInfo.network é apenas o nome ('besu'), não a URL
@@ -140,18 +136,11 @@ async function initializeEthers() {
       };
     }
     
-    console.log('✅ [RPC] Interceptação de requisições configurada');
-    
     // VERIFICAR CONEXÃO COM RPC NODE
-    console.log('🔍 [RPC] Verificando conexão com RPC node...');
-    console.log('🔍 [RPC] URL:', rpcUrl);
-    
     try {
       const network = await provider.getNetwork();
       const blockNumber = await provider.getBlockNumber();
-      console.log('✅ [RPC] Conectado! Chain ID:', network.chainId.toString());
-      console.log('✅ [RPC] Block atual:', blockNumber);
-      console.log('✅ [RPC] Network name:', network.name);
+      console.log('✅ [RPC] Conectado! Chain ID:', network.chainId.toString(), 'Block:', blockNumber);
     } catch (rpcError) {
       console.error('❌ [RPC] ERRO ao conectar:', rpcError);
       throw new Error('Não foi possível conectar ao RPC node: ' + rpcError.message);
@@ -162,14 +151,11 @@ async function initializeEthers() {
     if (contractCode === '0x' || contractCode === '0x0') {
       throw new Error(`Contrato não encontrado no endereço ${contractInfo.address}. Verifique se foi deployado.`);
     }
-    console.log('✅ [RPC] Contrato encontrado no endereço! Bytecode length:', contractCode.length);
     
     // Obter private key da conta 1 (hardcoded para teste)
     // OBS: Em produção, isso deve vir de forma segura
     const privateKey = '0x8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63'; // Account #1
     signer = new ethers.Wallet(privateKey, provider);
-    
-    console.log('✅ Signer address:', signer.address);
     
     // Buscar ABI do contrato
     const abiResponse = await fetch('/api/abi');
@@ -290,4 +276,3 @@ if (typeof window !== 'undefined') {
     processPolygon
   };
 }
-

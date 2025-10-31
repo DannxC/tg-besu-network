@@ -766,4 +766,42 @@ contract GeohashConverter {
 
         return result;
     }
+
+    // DEBUG FUNCTION: Process polygon but return only the RASTERIZED EDGES (no fill)
+    // This is useful for debugging the rasterizeEdge algorithm
+    function processPolygonEdgesOnly(int256[] memory latitudes, int256[] memory longitudes, uint8 precision) external returns (bytes32[] memory result) {
+        require(latitudes.length == longitudes.length, "Latitude and longitude arrays must have the same length");
+        require(latitudes.length >= 3, "Polygon must have at least 3 vertices");
+        require(precision <= geohashMaxPrecision, "Precision must be less than or equal to the maximum precision");
+        
+        uint256 i;
+        uint256 idx;
+        uint256 numEdges = latitudes.length;
+
+        bytes32 currentGeohash;
+
+        /* RASTERIZE EDGES ONLY */
+        // Rasterize all edges of the polygon to find edge geohashes
+        for (i = 0; i < numEdges; i++) {
+            idx = (i + 1) % numEdges;
+            rasterizeEdge(latitudes[i], longitudes[i], latitudes[idx], longitudes[idx], precision);
+        }
+
+        // initialize result array with correct length and copy the elements from comprehensiveGeohashes array
+        result = new bytes32[](comprehensiveGeohashes.length);
+        for (i = 0; i < comprehensiveGeohashes.length; i++) {
+            result[i] = comprehensiveGeohashes[i];
+        }
+
+        // Reset the geohashMap... all geohashes set as true should be set as false
+        for (i = 0; i < comprehensiveGeohashes.length; i++) {
+            currentGeohash = comprehensiveGeohashes[i];
+            geohashMap[currentGeohash] = false;
+        }
+
+        // Reset the comprehensiveGeohashes array
+        comprehensiveGeohashes = new bytes32[](0);
+
+        return result;
+    }
 }

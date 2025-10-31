@@ -18,12 +18,10 @@ const appState = {
 async function init() {
   // Evitar inicialização duplicada
   if (appState.initialized) {
-    console.log('Dashboard já inicializado, pulando...');
     return;
   }
   
   appState.initialized = true;
-  console.log('Inicializando dashboard...');
   
   // Carregar contrato
   try {
@@ -41,46 +39,45 @@ async function init() {
   
   // Inicializar ProcessPolygon handler
   if (window.ProcessPolygonHandler) {
-    ProcessPolygonHandler.init();
+    window.ProcessPolygonHandler.init();
     logMessage('ProcessPolygon handler inicializado');
   }
   
   // Desenhar grid inicial
   renderGrid();
-  
-  console.log('Dashboard inicializado com sucesso!');
 }
 
 /**
  * Carrega dados do contrato
  */
 async function loadContractData() {
-  console.log('loadContractData() iniciado');
   const contractInfo = await GeohashContract.loadContract();
-  console.log('Contrato carregado:', contractInfo);
+  
+  // CRÍTICO: Sincronizar precision do contrato com o frontend!
+  // O contrato tem gridCellLatSize/gridCellLonSize calculados com base na precision do deploy.
+  // Se o frontend usar uma precision diferente, as conversões lat/lon <-> geohash ficam erradas!
+  if (contractInfo && contractInfo.precision) {
+    console.log(`🔄 Sincronizando precision: frontend ${appState.precision} → contrato ${contractInfo.precision}`);
+    appState.precision = contractInfo.precision;
+  }
   
   // Atualizar UI com info do contrato
   updateContractInfo(contractInfo);
   
   appState.contractLoaded = true;
-  console.log('appState.contractLoaded = true');
-  // Manter precision default = 4 (já definido no appState inicial)
 }
 
 /**
  * Inicializa o canvas
  */
 function initCanvas() {
-  console.log('initCanvas() chamado');
   const canvas = document.getElementById('canvas');
   if (!canvas) {
     console.error('Canvas não encontrado!');
     return;
   }
-  console.log('Canvas encontrado:', canvas);
   GeohashGrid.initGrid(canvas);
   appState.gridInitialized = true;
-  console.log('Canvas inicializado, gridInitialized =', appState.gridInitialized);
 }
 
 /**
@@ -90,10 +87,8 @@ function setupEventListeners() {
   // Accordion
   setupAccordion();
   
-  // Modal de configurações
-  setupSettingsModal();
-  
   // Botões flutuantes removidos (não são mais necessários)
+  // Modal de configurações removido - precision é fixada pelo contrato
 }
 
 /**
@@ -102,14 +97,11 @@ function setupEventListeners() {
 function setupAccordion() {
   // Evitar setup duplicado
   if (appState.accordionSetup) {
-    console.log('Accordion já configurado, pulando...');
     return;
   }
   
   appState.accordionSetup = true;
-  console.log('setupAccordion() chamado');
   const accordionHeaders = document.querySelectorAll('.accordion-header');
-  console.log('Accordion headers encontrados:', accordionHeaders.length);
   
   accordionHeaders.forEach(header => {
     const section = header.dataset.section;
@@ -126,20 +118,16 @@ function setupAccordion() {
     if (headerIsActive) {
       content.classList.add('active');
       content.style.display = 'block';
-      console.log(`Accordion ${section}: INICIALIZADO COMO ATIVO`);
     } else {
       content.classList.remove('active');
       content.style.display = 'none';
-      console.log(`Accordion ${section}: INICIALIZADO COMO INATIVO`);
     }
     
     header.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       
-      console.log('Accordion clicado:', section);
       const isActive = header.classList.contains('active');
-      console.log('Estado atual isActive:', isActive);
       
       // Toggle usando display direto
       if (isActive) {
@@ -147,99 +135,13 @@ function setupAccordion() {
         header.classList.remove('active');
         content.classList.remove('active');
         content.style.display = 'none';
-        console.log(`FECHADO ${section}`);
       } else {
         // Abrir
         header.classList.add('active');
         content.classList.add('active');
         content.style.display = 'block';
-        console.log(`ABERTO ${section}`);
       }
     });
-  });
-}
-
-/**
- * Configura modal de configurações
- */
-function setupSettingsModal() {
-  const settingsBtn = document.getElementById('settings-btn');
-  const modal = document.getElementById('settings-modal');
-  const closeBtn = document.getElementById('close-modal');
-  const applyBtn = document.getElementById('apply-settings');
-  const precisionInput = document.getElementById('precision-input');
-  const precisionValue = document.getElementById('precision-value');
-  
-  // Obter max precision do contrato
-  const maxPrecision = GeohashContract.getMaxPrecision() || 16;
-  
-  // Atualizar atributos do input
-  precisionInput.setAttribute('max', maxPrecision.toString());
-  
-  // Abrir modal
-  settingsBtn.addEventListener('click', () => {
-    modal.classList.add('active');
-    // Sincronizar valor atual
-    precisionInput.value = appState.precision;
-    precisionValue.textContent = appState.precision;
-  });
-  
-  // Fechar modal
-  const closeModal = () => {
-    modal.classList.remove('active');
-  };
-  
-  closeBtn.addEventListener('click', closeModal);
-  
-  // Fechar ao clicar fora
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      closeModal();
-    }
-  });
-  
-  // Atualizar valor do slider
-  precisionInput.addEventListener('input', (e) => {
-    let value = parseInt(e.target.value);
-    
-    // Validar: deve ser par
-    if (value % 2 !== 0) {
-      value = value - 1;
-    }
-    
-    // Validar limites (min=2, max=maxPrecision do contrato)
-    value = Math.max(2, Math.min(maxPrecision, value));
-    
-    e.target.value = value;
-    precisionValue.textContent = value;
-  });
-  
-  // Aplicar configurações
-  applyBtn.addEventListener('click', () => {
-    const newPrecision = parseInt(precisionInput.value);
-    
-    // Validar contra max precision do contrato
-    if (newPrecision > maxPrecision) {
-      logMessage(`⚠️ Precision máxima do contrato: ${maxPrecision}`, 'error');
-      return;
-    }
-    
-    if (newPrecision !== appState.precision) {
-      appState.precision = newPrecision;
-      
-      // Atualizar display na sidebar
-      const currentPrecisionEl = document.getElementById('current-precision');
-      if (currentPrecisionEl) {
-        currentPrecisionEl.textContent = newPrecision;
-      }
-      
-      // Re-renderizar grid
-      renderGrid();
-      
-      logMessage(`Precision alterada para: ${newPrecision}`);
-    }
-    
-    closeModal();
   });
 }
 
@@ -247,7 +149,6 @@ function setupSettingsModal() {
  * Renderiza o grid
  */
 function renderGrid() {
-  console.log('renderGrid() chamado, precision:', appState.precision);
   if (!appState.gridInitialized) {
     console.error('Canvas não inicializado');
     return;
@@ -259,14 +160,11 @@ function renderGrid() {
     return;
   }
   
-  console.log('Chamando GeohashGrid.drawGrid()...');
   // Desenhar grid
   GeohashGrid.drawGrid(appState.precision);
-  console.log('Grid desenhado!');
   
   // Atualizar info do grid
   updateGridInfo();
-  console.log('Grid info atualizado');
 }
 
 /**
@@ -276,6 +174,7 @@ function updateContractInfo(contractInfo) {
   const addressEl = document.getElementById('contract-address');
   const precisionEl = document.getElementById('contract-precision');
   const networkEl = document.getElementById('contract-network');
+  const currentPrecisionEl = document.getElementById('current-precision');
   
   if (addressEl) {
     addressEl.textContent = contractInfo.address.slice(0, 10) + '...';
@@ -289,13 +188,17 @@ function updateContractInfo(contractInfo) {
   if (networkEl) {
     networkEl.textContent = `${contractInfo.network} (${contractInfo.chainId})`;
   }
+  
+  // Atualizar também o display de precision atual na sidebar
+  if (currentPrecisionEl) {
+    currentPrecisionEl.textContent = contractInfo.precision;
+  }
 }
 
 /**
  * Atualiza informações do grid na UI
  */
 function updateGridInfo() {
-  console.log('updateGridInfo() chamado');
   const gridCountEl = document.getElementById('grid-count');
   const cellSizeEl = document.getElementById('cell-size');
   const totalCellsEl = document.getElementById('total-cells');
@@ -304,25 +207,20 @@ function updateGridInfo() {
   const cellSize = GeohashUtils.getCellSize(appState.precision);
   const totalCells = gridCount * gridCount;
   
-  console.log('Grid Info:', { gridCount, cellSize, totalCells });
-  
   if (gridCountEl) {
     gridCountEl.textContent = `${gridCount}x${gridCount}`;
-    console.log('grid-count atualizado:', gridCountEl.textContent);
   } else {
     console.error('grid-count element não encontrado!');
   }
   
   if (cellSizeEl) {
     cellSizeEl.textContent = `${cellSize.width.toFixed(1)}x${cellSize.height.toFixed(1)}px`;
-    console.log('cell-size atualizado:', cellSizeEl.textContent);
   } else {
     console.error('cell-size element não encontrado!');
   }
   
   if (totalCellsEl) {
     totalCellsEl.textContent = totalCells.toLocaleString();
-    console.log('total-cells atualizado:', totalCellsEl.textContent);
   } else {
     console.error('total-cells element não encontrado!');
   }
@@ -376,4 +274,3 @@ if (document.readyState === 'loading') {
 
 // Fallback REMOVIDO - não é necessário e pode causar múltiplas inicializações
 // A proteção com appState.initialized já é suficiente
-

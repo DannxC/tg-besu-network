@@ -26,7 +26,6 @@ function drawGrid(precision) {
     return;
   }
 
-  console.log('drawGrid() iniciado, precision:', precision);
   currentPrecision = precision;
   
   // Limpar canvas
@@ -39,16 +38,12 @@ function drawGrid(precision) {
   const gridCount = GeohashUtils.getGridCount(precision);
   const cellSize = GeohashUtils.getCellSize(precision);
   
-  console.log('Grid params:', { gridCount, cellSize, canvasWidth: canvas.width, canvasHeight: canvas.height });
-  
   // Desenhar células e bordas
   drawCells(gridCount, cellSize);
-  console.log('Cells desenhadas');
   
   // Desenhar labels hexadecimais (apenas se precision <= 4)
   if (precision <= 4) {
     drawGeohashLabels(gridCount, cellSize);
-    console.log('Labels desenhadas');
   }
   
   // Desenhar border externa mais grossa
@@ -60,8 +55,6 @@ function drawGrid(precision) {
   // GARANTIR que lineDash está resetado após desenhar o grid
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
-  
-  console.log('Grid desenho completo!');
 }
 
 /**

@@ -11,7 +11,6 @@
   <div id="sidebar">
     <div class="sidebar-header">
       <h1>🗺️ Geohash</h1>
-      <button id="settings-btn" class="icon-btn" title="Configurações">⚙️</button>
     </div>
     
     <!-- Accordion: Contrato -->
@@ -193,23 +192,35 @@
       <div class="polygon-header">
         <span class="polygon-title">🔶 Process Polygon</span>
         <span id="polygon-points-count" class="polygon-count">0 pontos</span>
+        <button id="polygon-toggle-btn" class="polygon-toggle-btn" title="Minimizar/Maximizar">▼</button>
+      </div>
+      
+      <div class="polygon-header-row2">
         <select id="polygon-input-mode-select">
           <option value="click">🖱️ Click</option>
           <option value="manual">⌨️ Manual</option>
         </select>
       </div>
       
-      <div id="polygon-manual-form" class="polygon-manual-form" style="display: none;">
-        <input type="number" id="polygon-manual-lat" placeholder="Latitude" step="0.0001">
-        <input type="number" id="polygon-manual-lon" placeholder="Longitude" step="0.0001">
-        <button id="polygon-add-manual-btn" class="polygon-btn-add">+</button>
-      </div>
+      <div id="polygon-content" class="polygon-content">
+        <div class="polygon-debug-mode">
+          <label>
+            <input type="checkbox" id="polygon-edges-only-checkbox">
+            <span>🐛 Debug: Somente bordas (sem preenchimento)</span>
+          </label>
+        </div>
+        
+        <div id="polygon-manual-form" class="polygon-manual-form" style="display: none;">
+          <input type="number" id="polygon-manual-lat" placeholder="Latitude" step="0.0001">
+          <input type="number" id="polygon-manual-lon" placeholder="Longitude" step="0.0001">
+          <button id="polygon-add-manual-btn" class="polygon-btn-add">+</button>
+        </div>
 
-      <div id="polygon-points-list" class="polygon-points-list">
-        <!-- Pontos serão adicionados dinamicamente aqui -->
-      </div>
+        <div id="polygon-points-list" class="polygon-points-list">
+          <!-- Pontos serão adicionados dinamicamente aqui -->
+        </div>
 
-      <div class="polygon-actions">
+        <div class="polygon-actions">
         <button id="polygon-process-btn" class="polygon-btn polygon-process" disabled>
           ⚙️ Processar (mín: 3)
         </button>
@@ -217,39 +228,10 @@
           🗑️ Limpar
         </button>
       </div>
+      </div>
     </div>
 
     
-  </div>
-  
-  <!-- Modal de Configurações -->
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>⚙️ Configurações</h2>
-        <button id="close-modal" class="close-btn">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="setting-group">
-          <label for="precision-input">Precision (2-16, pares apenas)</label>
-          <div class="precision-control">
-            <input 
-              type="range" 
-              id="precision-input" 
-              min="2" 
-              max="16" 
-              step="2" 
-              value="4"
-            >
-            <span id="precision-value" class="precision-badge">4</span>
-          </div>
-          <p class="setting-hint">Define a granularidade do grid de geohashes</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="apply-settings" class="btn-primary">Aplicar</button>
-      </div>
-    </div>
   </div>
   
   <!-- Scripts -->
