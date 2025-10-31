@@ -80,7 +80,8 @@
   <div id="canvas-container">
     <!-- Tabs de teste -->
     <div class="test-tabs">
-      <button class="tab-btn active" data-tab="latlon-to-geohash">
+      <!-- TABS ANTIGAS COMENTADAS (para uso futuro)
+      <button class="tab-btn" data-tab="latlon-to-geohash">
         📍 Lat/Lon → Geohash
       </button>
       <button class="tab-btn" data-tab="geohash-to-latlon">
@@ -94,6 +95,12 @@
       </button>
       <button class="tab-btn" data-tab="rasterize-edge">
         📏 Rasterize Edge
+      </button>
+      -->
+      
+      <!-- TAB ATIVA: Process Polygon -->
+      <button class="tab-btn active" data-tab="process-polygon">
+        🔶 Process Polygon
       </button>
     </div>
     
@@ -127,36 +134,33 @@
 
       <!-- Direita: Controles de input -->
       <div class="footer-right">
-        <!-- Controles de input para Lat/Lon → Geohash -->
+        <!-- CONTROLES ANTIGOS COMENTADOS (para uso futuro)
         <div id="input-controls-latlon" class="input-controls" style="display: none;">
           <select id="input-mode-select-latlon">
             <option value="click">🖱️ Click</option>
             <option value="manual">⌨️ Manual</option>
           </select>
-
           <div id="manual-input-form-latlon" style="display: none;">
             <input type="number" id="manual-lat" placeholder="Latitude" step="0.0001">
             <input type="number" id="manual-lon" placeholder="Longitude" step="0.0001">
             <button id="manual-submit-btn-latlon">✓</button>
           </div>
         </div>
-
-        <!-- Controles de input para Geohash → Lat/Lon -->
         <div id="input-controls-geohash" class="input-controls" style="display: none;">
           <select id="input-mode-select-geohash">
             <option value="click">🖱️ Click</option>
             <option value="manual">⌨️ Manual</option>
           </select>
-
           <div id="manual-input-form-geohash" style="display: none;">
             <input type="text" id="manual-geohash" placeholder="Geohash (ex: ff, 3d)" maxlength="16">
             <button id="manual-submit-btn-geohash">✓</button>
           </div>
         </div>
+        -->
       </div>
     </div>
     
-    <!-- Controles direcionais para Move Geohash -->
+    <!-- CONTROLES ANTIGOS COMENTADOS (para uso futuro)
     <div id="direction-controls" class="direction-controls" style="display: none;">
       <div class="direction-grid">
         <div></div>
@@ -172,8 +176,6 @@
         <div></div>
       </div>
     </div>
-    
-    <!-- Controles para Bounding Box -->
     <div id="bbox-controls" class="bbox-controls" style="display: none;">
       <div class="bbox-header">
         <span class="bbox-title">Pontos do Polígono (mín: 3)</span>
@@ -182,14 +184,42 @@
           <option value="click">🖱️ Click</option>
         </select>
       </div>
-
-      <div id="bbox-points-list" class="bbox-points-list" style="display: block;">
-        <!-- Pontos serão adicionados dinamicamente aqui -->
-      </div>
-
+      <div id="bbox-points-list" class="bbox-points-list" style="display: block;"></div>
       <div class="bbox-actions">
         <button id="bbox-compute" class="bbox-btn bbox-compute">📦 Calcular BBox</button>
         <button id="bbox-clear" class="bbox-btn bbox-clear">🗑️ Limpar</button>
+      </div>
+    </div>
+    -->
+    
+    <!-- CONTROLES DO PROCESS POLYGON -->
+    <div id="polygon-controls" class="polygon-controls">
+      <div class="polygon-header">
+        <span class="polygon-title">🔶 Process Polygon</span>
+        <span id="polygon-points-count" class="polygon-count">0 pontos</span>
+        <select id="polygon-input-mode-select">
+          <option value="click">🖱️ Click</option>
+          <option value="manual">⌨️ Manual</option>
+        </select>
+      </div>
+      
+      <div id="polygon-manual-form" class="polygon-manual-form" style="display: none;">
+        <input type="number" id="polygon-manual-lat" placeholder="Latitude" step="0.0001">
+        <input type="number" id="polygon-manual-lon" placeholder="Longitude" step="0.0001">
+        <button id="polygon-add-manual-btn" class="polygon-btn-add">+</button>
+      </div>
+
+      <div id="polygon-points-list" class="polygon-points-list">
+        <!-- Pontos serão adicionados dinamicamente aqui -->
+      </div>
+
+      <div class="polygon-actions">
+        <button id="polygon-process-btn" class="polygon-btn polygon-process" disabled>
+          ⚙️ Processar (mín: 3)
+        </button>
+        <button id="polygon-clear-btn" class="polygon-btn polygon-clear">
+          🗑️ Limpar
+        </button>
       </div>
     </div>
 
@@ -265,7 +295,8 @@
   <script src="js/utils.js" onerror="alert('Failed to load utils.js')"></script>
   <script src="js/grid.js" onerror="alert('Failed to load grid.js')"></script>
   <script src="js/contract.js" onerror="alert('Failed to load contract.js')"></script>
-  <script src="js/test-handler.js" onerror="alert('Failed to load test-handler.js')"></script>
+  <!-- <script src="js/test-handler.js" onerror="alert('Failed to load test-handler.js')"></script> -->
+  <script src="js/process-polygon-handler.js" onerror="alert('Failed to load process-polygon-handler.js')"></script>
   <script src="js/main.js" onerror="alert('Failed to load main.js')"></script>
   
   <script>
@@ -273,7 +304,7 @@
     console.log('GeohashUtils:', typeof GeohashUtils);
     console.log('GeohashGrid:', typeof GeohashGrid);
     console.log('GeohashContract:', typeof GeohashContract);
-    console.log('TestHandler:', typeof TestHandler);
+    console.log('ProcessPolygonHandler:', typeof ProcessPolygonHandler);
     console.log('ethers:', typeof ethers);
   </script>
 </body>

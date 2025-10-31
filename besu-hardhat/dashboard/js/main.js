@@ -39,10 +39,10 @@ async function init() {
   // Configurar event listeners
   setupEventListeners();
   
-  // Inicializar test handler
-  if (window.TestHandler) {
-    TestHandler.init();
-    logMessage('Test handler inicializado');
+  // Inicializar ProcessPolygon handler
+  if (window.ProcessPolygonHandler) {
+    ProcessPolygonHandler.init();
+    logMessage('ProcessPolygon handler inicializado');
   }
   
   // Desenhar grid inicial
@@ -97,27 +97,19 @@ function setupEventListeners() {
   const refreshBtn = document.getElementById('refresh-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
-      // Se estiver na tab bounding box, resetar estado
-      if (window.testState && window.testState.activeTab === 'bounding-box') {
-        if (window.bboxState) {
-          window.bboxState.points = [];
-          window.bboxState.isDrawing = false;
-          window.bboxState.isLocked = false;
-          window.bboxState.snapPoint = null;
-          window.bboxState.calculatedBBox = null;
-          
-          // Resetar visibilidade
-          if (window.updateBBoxInputMode) {
-            window.updateBBoxInputMode();
-          }
-          
-          const snapCoords = document.getElementById('snap-coords');
-          if (snapCoords) snapCoords.style.display = 'none';
-        }
-      }
-      
       renderGrid();
       logMessage('Grid atualizado');
+    });
+  }
+  
+  // Botão de reset do teste
+  const resetTestBtn = document.getElementById('reset-test-btn');
+  if (resetTestBtn) {
+    resetTestBtn.addEventListener('click', () => {
+      if (window.ProcessPolygonHandler) {
+        ProcessPolygonHandler.reset();
+        logMessage('Teste resetado');
+      }
     });
   }
 }
