@@ -32,8 +32,21 @@ contract GeohashConverter {
         uint256 height;
     }
 
+    // DEBUG STRUCT: Para visualizar labels e classificação
+    struct GeohashDebugInfo {
+        bytes32 geohash;
+        uint256 label;          // Label original atribuído
+        uint256 finalLabel;     // Label final após equivalências
+        bool isInternal;        // Se foi marcado como interno
+        bool isEdge;            // Se veio do rasterizeEdge (true) ou fillPolygon (false)
+    }
+
 
     /* STATE VARIABLES */
+    
+    // DEBUG: Arrays temporários para armazenar informações de debug
+    GeohashDebugInfo[] private tempDebugInfo;
+    uint256[] private tempLabelEquivalencies;
 
     // CONSTANTS
     uint256 constant public DECIMALS = 18;                          // Number of decimals to use for the geohash precision
@@ -591,7 +604,7 @@ contract GeohashConverter {
     // it will consider that the edges are already rasterized in the map geohashesMap
     // This function utilizes the labelsToGeohash map. Remember to reset before use.
     // obs: x and y are already scaled by DECIMALS_FACTOR
-    function fillPolygon(int256[] memory latitudes, int256[] memory longitudes, uint8 precision, BoundingBox memory bbox) public {
+    function fillPolygon(int256[] memory latitudes, int256[] memory longitudes, uint8 precision, BoundingBox memory bbox, bool debug) public {
         require(latitudes.length == longitudes.length, "Latitude and longitude arrays must have the same length");
         require(latitudes.length >= 3, "Polygon must have at least 3 vertices");
         require(precision <= geohashMaxPrecision, "Precision must be less than or equal to the maximum precision");
@@ -689,6 +702,17 @@ contract GeohashConverter {
                 // Apenas se o tile estiver nos limites "reais" do bounding box
                 if (1 <= i && i <= bbox.height && 1 <= j && j <= bbox.width) {
                     labelToGeohashes[labelMap[i][j]].push(currentGeohash);
+                    
+                    // DEBUG: Armazenar info do geohash
+                    if (debug) {
+                        tempDebugInfo.push(GeohashDebugInfo({
+                            geohash: currentGeohash,
+                            label: labelMap[i][j],
+                            finalLabel: 0,  // Será preenchido depois
+                            isInternal: false,  // Será preenchido depois
+                            isEdge: false  // Será preenchido depois
+                        }));
+                    }
                 }
 
             }
@@ -712,6 +736,20 @@ contract GeohashConverter {
             }
         }
 
+        // DEBUG: Preencher labels finais e status interno
+        if (debug) {
+            // Copiar equivalências
+            for (i = 0; i < labelEquivalencyList.length; i++) {
+                tempLabelEquivalencies.push(labelEquivalencyList[i]);
+            }
+            
+            // Atualizar debugInfo com labels finais e status
+            for (i = 0; i < tempDebugInfo.length; i++) {
+                tempDebugInfo[i].finalLabel = labelEquivalencyList[tempDebugInfo[i].label];
+                tempDebugInfo[i].isInternal = geohashMap[tempDebugInfo[i].geohash];
+            }
+        }
+
         // Resetar o labelToGeohash e o labelEquivalencyList antes de sair da funcao.
         for (i = 0; i < labelEquivalencyList.length; i++) { // resetar o mapping labelToGeohashes
             labelToGeohashes[i] = new bytes32[](0);    // resetar o array associado ao i-esimo label
@@ -722,7 +760,16 @@ contract GeohashConverter {
 
     // Main function to process the polygon and return all encompassing geohashes
     // obs: latitudes and longitudes should be given in degrees and with the DECIMALS_FACTOR already applied
-    function processPolygon(int256[] memory latitudes, int256[] memory longitudes, uint8 precision) external returns (bytes32[] memory result) {
+    function processPolygon(int256[] memory latitudes, int256[] memory longitudes, uint8 precision, bool debug) 
+        external 
+        returns (
+            bytes32[] memory result,
+            GeohashDebugInfo[] memory debugInfo,
+            uint256[] memory labelEquivalencies,
+            uint256 totalLabels,
+            BoundingBox memory bboxDebug
+        ) 
+    {
         require(latitudes.length == longitudes.length, "Latitude and longitude arrays must have the same length");
         require(latitudes.length >= 3, "Polygon must have at least 3 vertices");
         require(precision <= geohashMaxPrecision, "Precision must be less than or equal to the maximum precision");
@@ -744,15 +791,102 @@ contract GeohashConverter {
             idx = (i + 1) % numEdges;
             rasterizeEdge(latitudes[i], longitudes[i], latitudes[idx], longitudes[idx], precision);
         }
+        
+        // DEBUG: Marcar quantos geohashes vieram do rasterizeEdge
+        uint256 edgeGeohashCount = 0;
+        if (debug) {
+            edgeGeohashCount = comprehensiveGeohashes.length;
+        }
 
         /* RASTERZE INTERNAL AREAS */
         // Fill the polygon, identifying all internal geohashes. It will consider that the edges are already rasterized in the map geohashesMap
-        fillPolygon(latitudes, longitudes, precision, bbox);
+        fillPolygon(latitudes, longitudes, precision, bbox, debug);
 
         // initialize result array with correct length and copy the elements from comprehensiveGeohashes array
         result = new bytes32[](comprehensiveGeohashes.length);
         for (i = 0; i < comprehensiveGeohashes.length; i++) {
             result[i] = comprehensiveGeohashes[i];
+        }
+
+        // Copiar debug info se necessário
+        if (debug) {
+            // Criar array dos edge geohashes (primeiros edgeGeohashCount do comprehensiveGeohashes)
+            bytes32[] memory edgeGeohashes = new bytes32[](edgeGeohashCount);
+            for (i = 0; i < edgeGeohashCount; i++) {
+                edgeGeohashes[i] = comprehensiveGeohashes[i];
+            }
+            
+            // Primeiro, marcar quais geohashes do tempDebugInfo são edges
+            for (i = 0; i < tempDebugInfo.length; i++) {
+                for (uint256 j = 0; j < edgeGeohashCount; j++) {
+                    if (tempDebugInfo[i].geohash == edgeGeohashes[j]) {
+                        tempDebugInfo[i].isEdge = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Agora, adicionar os edge geohashes que NÃO estão no tempDebugInfo
+            // (ou seja, edges puros que não foram "redescobertos" pelo fillPolygon)
+            uint256 missingEdges = 0;
+            for (i = 0; i < edgeGeohashCount; i++) {
+                bool found = false;
+                for (uint256 j = 0; j < tempDebugInfo.length; j++) {
+                    if (edgeGeohashes[i] == tempDebugInfo[j].geohash) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    missingEdges++;
+                }
+            }
+            
+            // Criar debugInfo final com tempDebugInfo + missing edges
+            debugInfo = new GeohashDebugInfo[](tempDebugInfo.length + missingEdges);
+            
+            // Copiar tempDebugInfo
+            for (i = 0; i < tempDebugInfo.length; i++) {
+                debugInfo[i] = tempDebugInfo[i];
+            }
+            
+            // Adicionar missing edges
+            uint256 debugIdx = tempDebugInfo.length;
+            for (i = 0; i < edgeGeohashCount; i++) {
+                bool found = false;
+                for (uint256 j = 0; j < tempDebugInfo.length; j++) {
+                    if (edgeGeohashes[i] == tempDebugInfo[j].geohash) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Edge puro que não foi processado pelo fillPolygon
+                    debugInfo[debugIdx] = GeohashDebugInfo({
+                        geohash: edgeGeohashes[i],
+                        label: 0,           // Edges puros não têm label do fillPolygon
+                        finalLabel: 0,      // Edges puros não têm finalLabel
+                        isInternal: false,  // Edges nunca são internos
+                        isEdge: true        // É um edge
+                    });
+                    debugIdx++;
+                }
+            }
+            
+            labelEquivalencies = new uint256[](tempLabelEquivalencies.length);
+            for (i = 0; i < tempLabelEquivalencies.length; i++) {
+                labelEquivalencies[i] = tempLabelEquivalencies[i];
+            }
+            totalLabels = tempLabelEquivalencies.length;
+            
+            // Limpar arrays temporários de debug
+            delete tempDebugInfo;
+            delete tempLabelEquivalencies;
+        } else {
+            // Retornar arrays vazios se debug=false
+            debugInfo = new GeohashDebugInfo[](0);
+            labelEquivalencies = new uint256[](0);
+            totalLabels = 0;
         }
 
         // Reset the geohashMap... all geohashes set as true should be set as false
@@ -764,44 +898,6 @@ contract GeohashConverter {
         // Reset the comprehensiveGeohashes array
         comprehensiveGeohashes = new bytes32[](0);
 
-        return result;
-    }
-
-    // DEBUG FUNCTION: Process polygon but return only the RASTERIZED EDGES (no fill)
-    // This is useful for debugging the rasterizeEdge algorithm
-    function processPolygonEdgesOnly(int256[] memory latitudes, int256[] memory longitudes, uint8 precision) external returns (bytes32[] memory result) {
-        require(latitudes.length == longitudes.length, "Latitude and longitude arrays must have the same length");
-        require(latitudes.length >= 3, "Polygon must have at least 3 vertices");
-        require(precision <= geohashMaxPrecision, "Precision must be less than or equal to the maximum precision");
-        
-        uint256 i;
-        uint256 idx;
-        uint256 numEdges = latitudes.length;
-
-        bytes32 currentGeohash;
-
-        /* RASTERIZE EDGES ONLY */
-        // Rasterize all edges of the polygon to find edge geohashes
-        for (i = 0; i < numEdges; i++) {
-            idx = (i + 1) % numEdges;
-            rasterizeEdge(latitudes[i], longitudes[i], latitudes[idx], longitudes[idx], precision);
-        }
-
-        // initialize result array with correct length and copy the elements from comprehensiveGeohashes array
-        result = new bytes32[](comprehensiveGeohashes.length);
-        for (i = 0; i < comprehensiveGeohashes.length; i++) {
-            result[i] = comprehensiveGeohashes[i];
-        }
-
-        // Reset the geohashMap... all geohashes set as true should be set as false
-        for (i = 0; i < comprehensiveGeohashes.length; i++) {
-            currentGeohash = comprehensiveGeohashes[i];
-            geohashMap[currentGeohash] = false;
-        }
-
-        // Reset the comprehensiveGeohashes array
-        comprehensiveGeohashes = new bytes32[](0);
-
-        return result;
+        return (result, debugInfo, labelEquivalencies, totalLabels, bbox);
     }
 }

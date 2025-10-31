@@ -1,4 +1,5 @@
 /* eslint-env browser */
+/* global setTimeout */
 /**
  * ProcessPolygon Handler - Testa a função processPolygon do GeohashConverter
  * 
@@ -15,6 +16,7 @@ const polygonState = {
   inputMode: 'click',   // 'click' ou 'manual'
   snapPoint: null,      // Ponto de hover/preview (ponto vermelho com snap)
   geohashResults: [],   // Geohashes retornados pelo contrato
+  debugInfo: null,      // Debug info (labels, equivalências, etc)
   isProcessing: false,  // Flag para evitar chamadas múltiplas
   initialized: false,   // Flag de inicialização
   snapThreshold: 5      // Distância em pixels para snap nas edges (reduzido de 8 para 5)
@@ -255,38 +257,58 @@ async function processPolygon() {
       longitudes.push(lonScaled);
     }
     
-    // Verificar se estamos em modo debug (somente bordas)
-    const edgesOnlyCheckbox = document.getElementById('polygon-edges-only-checkbox');
-    const edgesOnly = edgesOnlyCheckbox ? edgesOnlyCheckbox.checked : false;
+    // Verificar modo debug
+    const labelsDebugCheckbox = document.getElementById('polygon-labels-debug-checkbox');
+    const labelsDebug = labelsDebugCheckbox ? labelsDebugCheckbox.checked : false;
     
-    const functionName = edgesOnly ? 'processPolygonEdgesOnly' : 'processPolygon';
-    const functionLabel = edgesOnly ? '🐛 DEBUG: Somente bordas' : 'processPolygon (bordas + preenchimento)';
+    const functionLabel = labelsDebug ? 
+      '🔍 DEBUG: Labels e classificação (debug=true)' : 
+      'processPolygon (bordas + preenchimento)';
     
     addLogEntry(`📡 Chamando ${functionLabel} com ${polygonState.points.length} pontos (precision=${precision})...`, 'info');
     addLogEntry(`ℹ️ Contrato fecha o polígono automaticamente (${polygonState.points.length} → 1)`, 'info');
-    console.log(`Chamando ${functionName}:`, { latitudes, longitudes, precision });
+    console.log(`Chamando processPolygon:`, { latitudes, longitudes, precision, debug: labelsDebug });
     
-    // Chamar função do contrato (é uma transação que retorna array)
-    const tx = await contract[functionName](latitudes, longitudes, precision);
+    // Chamar função do contrato (é uma transação que retorna 5 valores)
+    const tx = await contract.processPolygon(latitudes, longitudes, precision, labelsDebug);
     
     addLogEntry('⏳ Aguardando confirmação da transação...', 'info');
     const receipt = await tx.wait();
     
     addLogEntry(`✅ Transação confirmada! Block: ${receipt.blockNumber}, Gas: ${receipt.gasUsed.toString()}`, 'success');
     
-    // Extrair geohashes do resultado
-    // Como processPolygon retorna bytes32[], precisamos decodificar os eventos ou fazer uma chamada view
-    // Vamos fazer uma chamada callStatic para obter o retorno
-    const geohashes = await contract.callStatic[functionName](latitudes, longitudes, precision);
-    
-    addLogEntry(`🎉 Processamento concluído! ${geohashes.length} geohashes retornados`, 'success');
-    console.log('Geohashes retornados:', geohashes);
+    // Extrair resultados do retorno
+    // processPolygon sempre retorna 5 valores: (result, debugInfo, labelEquivalencies, totalLabels, bbox)
+    const result = await contract.callStatic.processPolygon(latitudes, longitudes, precision, labelsDebug);
+    const geohashes = result[0];
+    const debugInfo = result[1];
+    const labelEquivalencies = result[2];
+    const totalLabels = result[3];
+    const bboxDebug = result[4];
     
     // Salvar resultados
     polygonState.geohashResults = geohashes;
     
+    if (labelsDebug && debugInfo.length > 0) {
+      // Debug info está presente
+      addLogEntry(`🎉 Debug concluído! ${geohashes.length} geohashes, ${totalLabels.toString()} labels`, 'success');
+      console.log('Debug Info:', { geohashes, debugInfo, labelEquivalencies, totalLabels, bboxDebug });
+      
+      polygonState.debugInfo = {
+        info: debugInfo,
+        equivalencies: labelEquivalencies,
+        totalLabels: totalLabels.toNumber(),
+        bbox: bboxDebug
+      };
+    } else {
+      // Debug desabilitado, arrays vazios
+      addLogEntry(`🎉 Processamento concluído! ${geohashes.length} geohashes retornados`, 'success');
+      console.log('Geohashes retornados:', geohashes);
+      polygonState.debugInfo = null;
+    }
+    
     // Atualizar UI
-    showTestStatus(`✅ ${geohashes.length} geohashes processados`, 'success');
+    showTestStatus(`✅ ${polygonState.geohashResults.length} geohashes processados`, 'success');
     
     // Renderizar resultados no canvas
     renderPolygonState();
@@ -342,6 +364,7 @@ function clearPolygon() {
   // Resetar TODOS os estados
   polygonState.points = [];
   polygonState.geohashResults = [];
+  polygonState.debugInfo = null;
   polygonState.snapPoint = null;
   polygonState.inputMode = 'click';
   polygonState.isProcessing = false;
@@ -455,6 +478,48 @@ function renderPolygonState() {
       
       ctx.fillStyle = '#4CAF50';
       ctx.fillRect(x, y, cellSize.width, cellSize.height);
+    });
+    
+    ctx.restore();
+    ctx.setLineDash([]); // Garantir linha sólida após restore
+  }
+  
+  // 1.5. Desenhar labels de debug (se houver)
+  if (polygonState.debugInfo) {
+    ctx.save();
+    ctx.setLineDash([]); // Garantir linha sólida
+    
+    const cellSize = GeohashUtils.getCellSize(precision);
+    const debugInfo = polygonState.debugInfo.info;
+    
+    debugInfo.forEach(info => {
+      const zOrderIndex = bytes32ToZOrderIndex(info.geohash, precision);
+      const { gridX, gridY } = zOrderToGrid(zOrderIndex, precision);
+      const centerX = (gridX + 0.5) * cellSize.width;
+      const centerY = (gridY + 0.5) * cellSize.height;
+      
+      // Cor baseada no status
+      if (info.isInternal) {
+        ctx.fillStyle = '#4CAF50'; // Verde para interno
+        ctx.strokeStyle = '#2E7D32';
+      } else {
+        ctx.fillStyle = '#FF5722'; // Vermelho para externo/borda
+        ctx.strokeStyle = '#C62828';
+      }
+      
+      // Desenhar círculo pequeno
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Desenhar label (número)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 9px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(info.finalLabel.toString(), centerX, centerY);
     });
     
     ctx.restore();
