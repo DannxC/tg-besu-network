@@ -54,7 +54,12 @@ function drawGrid(precision) {
   // Desenhar border externa mais grossa
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 2;
+  ctx.setLineDash([]); // SEMPRE linhas sólidas no grid
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
+  
+  // GARANTIR que lineDash está resetado após desenhar o grid
+  ctx.setLineDash([]);
+  ctx.lineWidth = 1;
   
   console.log('Grid desenho completo!');
 }
@@ -67,6 +72,7 @@ function drawGrid(precision) {
 function drawCells(gridCount, cellSize) {
   ctx.strokeStyle = '#CCCCCC';
   ctx.lineWidth = 1;
+  ctx.setLineDash([]); // SEMPRE linhas sólidas
   
   // Linhas verticais
   for (let i = 0; i <= gridCount; i++) {

@@ -93,25 +93,7 @@ function setupEventListeners() {
   // Modal de configurações
   setupSettingsModal();
   
-  // Botão de refresh flutuante
-  const refreshBtn = document.getElementById('refresh-btn');
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
-      renderGrid();
-      logMessage('Grid atualizado');
-    });
-  }
-  
-  // Botão de reset do teste
-  const resetTestBtn = document.getElementById('reset-test-btn');
-  if (resetTestBtn) {
-    resetTestBtn.addEventListener('click', () => {
-      if (window.ProcessPolygonHandler) {
-        ProcessPolygonHandler.reset();
-        logMessage('Teste resetado');
-      }
-    });
-  }
+  // Botões flutuantes removidos (não são mais necessários)
 }
 
 /**

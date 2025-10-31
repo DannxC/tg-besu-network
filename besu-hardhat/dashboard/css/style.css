@@ -344,8 +344,10 @@ canvas {
   min-height: 60px;
   background: rgba(0, 0, 0, 0.9);
   border-top: 1px solid #444;
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 20px;
+  align-items: center;
   padding: 10px 20px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -353,40 +355,40 @@ canvas {
 }
 
 .footer-left {
-  flex: 0 0 auto;
-  max-width: 40%;
-  min-width: 200px;
-  margin-right: 20px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
 }
 
 .footer-center {
-  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
 .footer-right {
-  flex: 0 0 auto;
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 10px;
 }
 
 #snap-coords {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.85);
   color: #aaa;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 11px;
-  border: 1px solid #555;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 2px solid #ff4444;
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
 }
 
 #snap-lat, #snap-lon {
   color: #ff4444;
   font-weight: bold;
   margin-right: 15px;
+  font-family: 'Courier New', monospace;
 }
 
 /* Direction Controls */

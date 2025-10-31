@@ -13,10 +13,11 @@
 const polygonState = {
   points: [],           // Array de { lat, lon }
   inputMode: 'click',   // 'click' ou 'manual'
-  snapPoint: null,      // Ponto de hover/preview
+  snapPoint: null,      // Ponto de hover/preview (ponto vermelho com snap)
   geohashResults: [],   // Geohashes retornados pelo contrato
   isProcessing: false,  // Flag para evitar chamadas múltiplas
-  initialized: false    // Flag de inicialização
+  initialized: false,   // Flag de inicialização
+  snapThreshold: 5      // Distância em pixels para snap nas edges (reduzido de 8 para 5)
 };
 
 /**
@@ -92,13 +93,21 @@ function setupCanvasInteraction() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Converter pixel para lat/lon
-    const coords = GeohashUtils.pixelToLatLon(x, y);
+    // Usar snap point se disponível (ponto vermelho), senão usar posição do mouse
+    let lat, lon;
+    if (polygonState.snapPoint) {
+      lat = polygonState.snapPoint.lat;
+      lon = polygonState.snapPoint.lon;
+    } else {
+      const coords = GeohashUtils.canvasToLatLon(x, y);
+      lat = coords.lat;
+      lon = coords.lon;
+    }
     
-    addPoint(coords.lat, coords.lon);
+    addPoint(lat, lon);
   });
   
-  // Mousemove para preview
+  // Mousemove para preview com SNAP
   canvas.addEventListener('mousemove', (e) => {
     if (polygonState.inputMode !== 'click') {
       polygonState.snapPoint = null;
@@ -110,11 +119,12 @@ function setupCanvasInteraction() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    const coords = GeohashUtils.pixelToLatLon(x, y);
-    polygonState.snapPoint = coords;
+    // Calcular snap to edge (ponto vermelho)
+    const precision = window.appState ? window.appState.precision : 4;
+    polygonState.snapPoint = calculateSnapToEdge(x, y, precision);
     
-    // Atualizar coordenadas na UI
-    updateSnapCoords(coords.lat, coords.lon);
+    // Atualizar coordenadas na UI (do ponto vermelho, não do mouse!)
+    updateSnapCoords(polygonState.snapPoint.lat, polygonState.snapPoint.lon);
     
     // Re-desenhar grid com preview
     renderPolygonState();
@@ -132,6 +142,17 @@ function setupCanvasInteraction() {
  * Adiciona ponto ao polígono
  */
 function addPoint(lat, lon) {
+  // Verificar se o ponto já existe (evitar vértices duplicados)
+  const isDuplicate = polygonState.points.some(point => 
+    Math.abs(point.lat - lat) < 0.0001 && Math.abs(point.lon - lon) < 0.0001
+  );
+  
+  if (isDuplicate) {
+    addLogEntry('⚠️ Vértice duplicado! Escolha outro ponto.', 'warning');
+    showTestStatus('Vértice duplicado ignorado', 'error');
+    return;
+  }
+  
   polygonState.points.push({ lat, lon });
   
   addLogEntry(`Ponto ${polygonState.points.length} adicionado: (${lat.toFixed(4)}, ${lon.toFixed(4)})`, 'success');
@@ -154,17 +175,20 @@ function addManualPoint() {
   
   if (isNaN(lat) || isNaN(lon)) {
     addLogEntry('⚠️ Lat/Lon inválidos', 'error');
+    showTestStatus('Lat/Lon inválidos', 'error');
     return;
   }
   
   // Validar limites
   if (lat < -90 || lat > 90) {
     addLogEntry('⚠️ Latitude deve estar entre -90 e 90', 'error');
+    showTestStatus('Latitude fora dos limites', 'error');
     return;
   }
   
   if (lon < -180 || lon > 180) {
     addLogEntry('⚠️ Longitude deve estar entre -180 e 180', 'error');
+    showTestStatus('Longitude fora dos limites', 'error');
     return;
   }
   
@@ -178,12 +202,18 @@ function addManualPoint() {
 
 /**
  * Processa o polígono chamando o contrato
+ * 
+ * IMPORTANTE: O contrato processPolygon() fecha o polígono AUTOMATICAMENTE.
+ * Não é necessário repetir o primeiro ponto no final!
+ * 
+ * Exemplo: Se passar [A, B, C], o contrato desenha: A→B, B→C, C→A
+ * (linha 744-746 do GeohashConverter.sol usa módulo para fechar)
  */
 async function processPolygon() {
   // Validar mínimo de pontos
   if (polygonState.points.length < 3) {
     addLogEntry('⚠️ Adicione pelo menos 3 pontos para processar', 'error');
-    updateTestStatus('Mínimo 3 pontos necessários', 'error');
+    showTestStatus('Mínimo 3 pontos necessários', 'error');
     return;
   }
   
@@ -193,7 +223,7 @@ async function processPolygon() {
   }
   
   polygonState.isProcessing = true;
-  updateTestStatus('⏳ Processando polígono...', 'loading');
+  showTestStatus('⏳ Processando polígono...', 'loading');
   
   try {
     // Obter contrato
@@ -219,6 +249,7 @@ async function processPolygon() {
     }
     
     addLogEntry(`📡 Chamando processPolygon com ${polygonState.points.length} pontos (precision=${precision})...`, 'info');
+    addLogEntry(`ℹ️ Contrato fecha o polígono automaticamente (${polygonState.points.length} → 1)`, 'info');
     console.log('Chamando processPolygon:', { latitudes, longitudes, precision });
     
     // Chamar função do contrato (é uma transação que retorna array)
@@ -241,7 +272,7 @@ async function processPolygon() {
     polygonState.geohashResults = geohashes;
     
     // Atualizar UI
-    updateTestStatus(`✅ ${geohashes.length} geohashes processados`, 'success');
+    showTestStatus(`✅ ${geohashes.length} geohashes processados`, 'success');
     
     // Renderizar resultados no canvas
     renderPolygonState();
@@ -249,7 +280,7 @@ async function processPolygon() {
   } catch (error) {
     console.error('Erro ao processar polígono:', error);
     addLogEntry(`❌ Erro: ${error.message}`, 'error');
-    updateTestStatus(`Erro: ${error.message}`, 'error');
+    showTestStatus(`Erro: ${error.message}`, 'error');
   } finally {
     polygonState.isProcessing = false;
   }
@@ -291,18 +322,35 @@ function bytes32ToZOrderIndex(bytes32Hex, precision) {
 }
 
 /**
- * Limpa o polígono
+ * Limpa o polígono - RESET COMPLETO como F5
  */
 function clearPolygon() {
+  // Resetar TODOS os estados
   polygonState.points = [];
   polygonState.geohashResults = [];
   polygonState.snapPoint = null;
+  polygonState.inputMode = 'click';
+  polygonState.isProcessing = false;
   
+  // Resetar UI
   updatePolygonUI();
-  renderPolygonState();
   
-  addLogEntry('🗑️ Polígono limpo', 'info');
-  updateTestStatus('Polígono limpo', 'normal');
+  // Limpar canvas e redesenhar grid limpo
+  if (window.GeohashGrid && window.appState) {
+    GeohashGrid.drawGrid(window.appState.precision);
+  }
+  
+  // Limpar coordenadas snap
+  updateSnapCoords(null, null);
+  
+  // Resetar seletor de input mode
+  const inputModeSelect = document.getElementById('polygon-input-mode-select');
+  if (inputModeSelect) {
+    inputModeSelect.value = 'click';
+  }
+  
+  addLogEntry('🗑️ Estado resetado completamente', 'info');
+  showTestStatus('Estado resetado', 'normal');
 }
 
 /**
@@ -363,7 +411,7 @@ function updatePolygonUI() {
  * Renderiza estado do polígono no canvas
  */
 function renderPolygonState() {
-  // Re-desenhar grid base
+  // Re-desenhar grid base (linhas do grid SEMPRE sólidas, não tracejadas)
   if (window.GeohashGrid && window.appState) {
     GeohashGrid.drawGrid(window.appState.precision);
   }
@@ -374,101 +422,247 @@ function renderPolygonState() {
   const ctx = canvas.getContext('2d');
   const precision = window.appState.precision;
   
+  // IMPORTANTE: Garantir que o lineDash está resetado após drawGrid
+  ctx.setLineDash([]);
+  
   // 1. Desenhar geohashes retornados (se houver)
   if (polygonState.geohashResults.length > 0) {
     ctx.save();
     ctx.globalAlpha = 0.5;
+    ctx.setLineDash([]); // Garantir linha sólida
+    
+    const cellSize = GeohashUtils.getCellSize(precision);
     
     polygonState.geohashResults.forEach(geohash => {
       const zOrderIndex = bytes32ToZOrderIndex(geohash, precision);
-      const { gridX, gridY } = GeohashUtils.zOrderToGrid(zOrderIndex, precision);
-      const { x, y, width, height } = GeohashUtils.gridToPixel(gridX, gridY, precision);
+      const { gridX, gridY } = zOrderToGrid(zOrderIndex, precision);
+      const x = gridX * cellSize.width;
+      const y = gridY * cellSize.height;
       
       ctx.fillStyle = '#4CAF50';
-      ctx.fillRect(x, y, width, height);
+      ctx.fillRect(x, y, cellSize.width, cellSize.height);
     });
     
     ctx.restore();
+    ctx.setLineDash([]); // Garantir linha sólida após restore
   }
   
-  // 2. Desenhar linhas do polígono
+  // 2. Desenhar linhas entre os pontos (CHEIAS entre pontos, TRACEJADA até red dot)
   if (polygonState.points.length > 0) {
     ctx.save();
-    ctx.strokeStyle = '#2196F3';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
     
-    ctx.beginPath();
-    
-    // Primeiro ponto
-    const firstPoint = GeohashUtils.latLonToPixel(
-      polygonState.points[0].lat,
-      polygonState.points[0].lon
-    );
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-    
-    // Demais pontos
-    for (let i = 1; i < polygonState.points.length; i++) {
-      const point = GeohashUtils.latLonToPixel(
-        polygonState.points[i].lat,
-        polygonState.points[i].lon
+    // Desenhar linhas CHEIAS entre pontos consecutivos
+    if (polygonState.points.length > 1) {
+      ctx.strokeStyle = '#FFC107'; // Amarelo
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]); // Linha cheia (EXPLICITAMENTE)
+      
+      ctx.beginPath();
+      
+      // Primeiro ponto
+      const firstPoint = GeohashUtils.latLonToCanvas(
+        polygonState.points[0].lat,
+        polygonState.points[0].lon
       );
-      ctx.lineTo(point.x, point.y);
+      ctx.moveTo(firstPoint.x, firstPoint.y);
+      
+      // Demais pontos
+      for (let i = 1; i < polygonState.points.length; i++) {
+        const point = GeohashUtils.latLonToCanvas(
+          polygonState.points[i].lat,
+          polygonState.points[i].lon
+        );
+        ctx.lineTo(point.x, point.y);
+      }
+      
+      ctx.stroke();
+      
+      // LINHA DE FECHAMENTO: último → primeiro (se tiver 3+ pontos)
+      if (polygonState.points.length >= 3) {
+        ctx.strokeStyle = '#FFC107'; // Amarelo
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]); // Linha cheia
+        
+        ctx.beginPath();
+        
+        const lastPoint = GeohashUtils.latLonToCanvas(
+          polygonState.points[polygonState.points.length - 1].lat,
+          polygonState.points[polygonState.points.length - 1].lon
+        );
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(firstPoint.x, firstPoint.y); // Volta para o primeiro
+        
+        ctx.stroke();
+      }
     }
     
-    // Fechar polígono
-    if (polygonState.points.length > 2) {
-      ctx.lineTo(firstPoint.x, firstPoint.y);
+    // Desenhar linha TRACEJADA do último ponto até o red dot
+    if (polygonState.snapPoint && polygonState.inputMode === 'click') {
+      ctx.strokeStyle = '#FFC107'; // Amarelo
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // Linha tracejada (EXPLICITAMENTE)
+      
+      ctx.beginPath();
+      
+      const lastPoint = GeohashUtils.latLonToCanvas(
+        polygonState.points[polygonState.points.length - 1].lat,
+        polygonState.points[polygonState.points.length - 1].lon
+      );
+      ctx.moveTo(lastPoint.x, lastPoint.y);
+      ctx.lineTo(polygonState.snapPoint.canvasX, polygonState.snapPoint.canvasY);
+      
+      ctx.stroke();
     }
     
-    ctx.stroke();
     ctx.restore();
+    ctx.setLineDash([]); // RESETAR linha para sólida após restore
   }
   
-  // 3. Desenhar pontos do polígono
+  // 3. Desenhar pontos do polígono (AMARELO com borda PRETA e números)
+  ctx.setLineDash([]); // Garantir linha sólida antes de desenhar círculos
+  
   polygonState.points.forEach((point, index) => {
-    const pixel = GeohashUtils.latLonToPixel(point.lat, point.lon);
+    const pixel = GeohashUtils.latLonToCanvas(point.lat, point.lon);
     
-    // Círculo do ponto
     ctx.save();
-    ctx.fillStyle = '#2196F3';
+    ctx.setLineDash([]); // Garantir linha sólida
+    
+    // Círculo amarelo
+    ctx.fillStyle = '#FFC107';
     ctx.beginPath();
-    ctx.arc(pixel.x, pixel.y, 6, 0, Math.PI * 2);
+    ctx.arc(pixel.x, pixel.y, 7, 0, Math.PI * 2);
     ctx.fill();
     
-    // Borda branca
-    ctx.strokeStyle = 'white';
+    // Borda preta
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // Número do ponto
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 10px Arial';
+    // Número do ponto (preto para contrastar com amarelo)
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText((index + 1).toString(), pixel.x, pixel.y);
     
     ctx.restore();
+    ctx.setLineDash([]); // RESETAR após restore
   });
   
-  // 4. Desenhar ponto de preview (snapPoint)
-  if (polygonState.snapPoint) {
-    const pixel = GeohashUtils.latLonToPixel(
-      polygonState.snapPoint.lat,
-      polygonState.snapPoint.lon
-    );
-    
+  // 4. Desenhar PONTO VERMELHO com snap (bolinha vermelha) - SEMPRE visível no modo click
+  if (polygonState.snapPoint && polygonState.inputMode === 'click') {
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 193, 7, 0.5)';
+    ctx.setLineDash([]); // Garantir linha sólida
+    
+    // Desenhar bolinha vermelha (tamanho reduzido: raio 4)
     ctx.beginPath();
-    ctx.arc(pixel.x, pixel.y, 5, 0, Math.PI * 2);
+    ctx.arc(polygonState.snapPoint.canvasX, polygonState.snapPoint.canvasY, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
     ctx.fill();
     
-    ctx.strokeStyle = '#FFC107';
-    ctx.lineWidth = 2;
+    // Borda branca
+    ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
+    
     ctx.restore();
+    ctx.setLineDash([]); // RESETAR após restore
   }
+}
+
+/**
+ * Converte Z-Order index para coordenadas de grid
+ * @param {number} zOrderIndex - Índice Z-Order
+ * @param {number} precision - Precisão do grid
+ * @returns {{gridX: number, gridY: number}}
+ */
+function zOrderToGrid(zOrderIndex, precision) {
+  let gridX = 0;
+  let gridY = 0;
+  
+  // Decodificar Z-Order (intercalar bits: lon, lat, lon, lat...)
+  for (let i = 0; i < precision; i++) {
+    const bit = (zOrderIndex >> (2 * i)) & 3;
+    
+    // bit = 0 (00): canto inferior esquerdo
+    // bit = 1 (01): canto inferior direito
+    // bit = 2 (10): canto superior esquerdo  
+    // bit = 3 (11): canto superior direito
+    
+    const xBit = bit & 1;       // bit menos significativo (longitude)
+    const yBit = (bit >> 1) & 1; // bit mais significativo (latitude)
+    
+    gridX |= (xBit << i);
+    gridY |= (yBit << i);
+  }
+  
+  return { gridX, gridY };
+}
+
+/**
+ * Calcula snap to edge (ponto vermelho que gruda nas edges do grid)
+ * @param {number} mouseX - Posição X do mouse no canvas
+ * @param {number} mouseY - Posição Y do mouse no canvas
+ * @param {number} precision - Precisão do grid
+ * @returns {object} - Objeto com { lat, lon, canvasX, canvasY }
+ */
+function calculateSnapToEdge(mouseX, mouseY, precision) {
+  const { lat, lon } = GeohashUtils.canvasToLatLon(mouseX, mouseY);
+  const cellSize = GeohashUtils.getCellSize(precision);
+  
+  // Calcular qual célula estamos
+  const gridX = Math.floor(mouseX / cellSize.width);
+  const gridY = Math.floor(mouseY / cellSize.height);
+  
+  // Posições das arestas da célula
+  const leftEdge = gridX * cellSize.width;
+  const rightEdge = (gridX + 1) * cellSize.width;
+  const topEdge = gridY * cellSize.height;
+  const bottomEdge = (gridY + 1) * cellSize.height;
+  
+  // Distâncias para cada aresta
+  const distToLeft = Math.abs(mouseX - leftEdge);
+  const distToRight = Math.abs(mouseX - rightEdge);
+  const distToTop = Math.abs(mouseY - topEdge);
+  const distToBottom = Math.abs(mouseY - bottomEdge);
+  
+  let snappedX = mouseX;
+  let snappedY = mouseY;
+  let snappedLat = lat;
+  let snappedLon = lon;
+  
+  // Snap para aresta vertical mais próxima (ajusta longitude)
+  if (distToLeft < polygonState.snapThreshold) {
+    snappedX = leftEdge;
+    const snapped = GeohashUtils.canvasToLatLon(leftEdge, mouseY);
+    snappedLat = snapped.lat;
+    snappedLon = snapped.lon;
+  } else if (distToRight < polygonState.snapThreshold) {
+    snappedX = rightEdge;
+    const snapped = GeohashUtils.canvasToLatLon(rightEdge, mouseY);
+    snappedLat = snapped.lat;
+    snappedLon = snapped.lon;
+  }
+  
+  // Snap para aresta horizontal mais próxima (ajusta latitude)
+  if (distToTop < polygonState.snapThreshold) {
+    snappedY = topEdge;
+    const snapped = GeohashUtils.canvasToLatLon(snappedX, topEdge);
+    snappedLat = snapped.lat;
+    snappedLon = snapped.lon;
+  } else if (distToBottom < polygonState.snapThreshold) {
+    snappedY = bottomEdge;
+    const snapped = GeohashUtils.canvasToLatLon(snappedX, bottomEdge);
+    snappedLat = snapped.lat;
+    snappedLon = snapped.lon;
+  }
+  
+  return {
+    lat: snappedLat,
+    lon: snappedLon,
+    canvasX: snappedX,
+    canvasY: snappedY
+  };
 }
 
 /**
@@ -485,28 +679,68 @@ function updateSnapCoords(lat, lon) {
     snapCoords.style.display = 'none';
   } else {
     snapCoords.style.display = 'block';
-    snapLat.textContent = lat.toFixed(4);
-    snapLon.textContent = lon.toFixed(4);
+    snapLat.textContent = lat.toFixed(4) + '°';
+    snapLon.textContent = lon.toFixed(4) + '°';
   }
 }
 
 /**
- * Atualiza status do teste (usa função global se existir)
+ * Atualiza status do teste
  */
-function updateTestStatus(message, type = 'normal') {
-  if (typeof window.updateTestStatus === 'function') {
-    window.updateTestStatus(message, type);
+function showTestStatus(message, type = 'normal') {
+  const statusEl = document.getElementById('test-status');
+  const statusText = document.getElementById('status-text');
+  
+  if (statusEl && statusText) {
+    statusText.textContent = message;
+    
+    // Remover classes anteriores
+    statusEl.classList.remove('loading', 'success', 'error', 'hidden');
+    
+    // Adicionar nova classe
+    if (type !== 'normal') {
+      statusEl.classList.add(type);
+    }
+    
+    // Esconder automaticamente após 2 segundos (exceto para erros)
+    if (type !== 'error' && type !== 'loading') {
+      setTimeout(() => {
+        if (statusEl) {
+          statusEl.classList.add('hidden');
+        }
+      }, 2000);
+    }
   }
 }
 
 /**
- * Adiciona entrada ao log (usa função global se existir)
+ * Adiciona entrada ao log
  */
 function addLogEntry(message, type = 'info') {
-  if (typeof window.logMessage === 'function') {
-    window.logMessage(message, type);
-  } else {
+  const logContainer = document.getElementById('log');
+  if (!logContainer) {
     console.log(`[${type.toUpperCase()}] ${message}`);
+    return;
+  }
+  
+  const entry = document.createElement('div');
+  entry.className = `log-entry log-${type}`;
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  
+  // Adicionar no final
+  logContainer.appendChild(entry);
+  
+  // Limitar a 50 entradas
+  while (logContainer.children.length > 50) {
+    logContainer.removeChild(logContainer.firstChild);
+  }
+  
+  // Auto-scroll para o bottom
+  const logSection = document.getElementById('log-section');
+  if (logSection) {
+    setTimeout(() => {
+      logSection.scrollTop = logSection.scrollHeight;
+    }, 0);
   }
 }
 
