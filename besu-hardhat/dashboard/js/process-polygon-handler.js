@@ -19,7 +19,13 @@ const polygonState = {
   debugInfo: null,      // Debug info (labels, equivalências, etc)
   isProcessing: false,  // Flag para evitar chamadas múltiplas
   initialized: false,   // Flag de inicialização
-  snapThreshold: 5      // Distância em pixels para snap nas edges (reduzido de 8 para 5)
+  snapThreshold: 5,     // Distância em pixels para snap nas edges (reduzido de 8 para 5)
+  visualToggles: {      // Controles de visualização
+    showBBoxRect: true,
+    showBBoxGeohashes: true,
+    showLabels: true,
+    showEdgeContrast: false
+  }
 };
 
 /**
@@ -34,6 +40,7 @@ function initProcessPolygonHandler() {
   setupPolygonControls();
   setupCanvasInteraction();
   setupDebugPanelDrag();
+  setupVisualToggles();
   
   polygonState.initialized = true;
 }
@@ -94,6 +101,44 @@ function setupDebugPanelDrag() {
 }
 
 /**
+ * Setup dos controles visuais de debug
+ */
+function setupVisualToggles() {
+  const toggleBBoxRect = document.getElementById('debug-show-bbox-rect');
+  const toggleBBoxGeohashes = document.getElementById('debug-show-bbox-geohashes');
+  const toggleLabels = document.getElementById('debug-show-labels');
+  const toggleEdgeContrast = document.getElementById('debug-show-edge-contrast');
+  
+  if (toggleBBoxRect) {
+    toggleBBoxRect.addEventListener('change', (e) => {
+      polygonState.visualToggles.showBBoxRect = e.target.checked;
+      renderPolygonState();
+    });
+  }
+  
+  if (toggleBBoxGeohashes) {
+    toggleBBoxGeohashes.addEventListener('change', (e) => {
+      polygonState.visualToggles.showBBoxGeohashes = e.target.checked;
+      renderPolygonState();
+    });
+  }
+  
+  if (toggleLabels) {
+    toggleLabels.addEventListener('change', (e) => {
+      polygonState.visualToggles.showLabels = e.target.checked;
+      renderPolygonState();
+    });
+  }
+  
+  if (toggleEdgeContrast) {
+    toggleEdgeContrast.addEventListener('change', (e) => {
+      polygonState.visualToggles.showEdgeContrast = e.target.checked;
+      renderPolygonState();
+    });
+  }
+}
+
+/**
  * Setup controles do polígono
  */
 function setupPolygonControls() {
@@ -128,6 +173,12 @@ function setupPolygonControls() {
   const clearBtn = document.getElementById('polygon-clear-btn');
   if (clearBtn) {
     clearBtn.addEventListener('click', clearPolygon);
+  }
+  
+  // Botão de download (flutuante no canvas)
+  const downloadBtn = document.getElementById('canvas-download-btn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadCanvas);
   }
   
   // Botão de toggle (minimizar/maximizar)
@@ -326,7 +377,11 @@ async function processPolygon() {
     console.log(`Chamando processPolygon:`, { latitudes, longitudes, precision, debug: labelsDebug });
     
     // Chamar função do contrato (é uma transação que retorna 5 valores)
-    const tx = await contract.processPolygon(latitudes, longitudes, precision, labelsDebug);
+    // FORÇAR gasLimit para pular eth_estimateGas (que está travando o Besu)
+    addLogEntry(`⚠️ Pulando estimateGas e forçando gasLimit=80M`, 'warning');
+    const tx = await contract.processPolygon(latitudes, longitudes, precision, labelsDebug, {
+      gasLimit: 80000000 // 80M (bloco permite 100M)
+    });
     
     addLogEntry(`⏳ Aguardando confirmação... TxHash: ${tx.hash}`, 'info');
     console.log('📝 Transaction submitted:', { hash: tx.hash, from: tx.from, to: tx.to });
@@ -548,11 +603,11 @@ function renderPolygonState() {
     const bbox = polygonState.debugInfo.bbox;
     const cellSize = GeohashUtils.getCellSize(precision);
     
-    // Desenhar os 3 geohashes da bounding box com hachura
-    // bbox.geohashes[0] = bottom-left (minLat, minLon)
-    // bbox.geohashes[1] = top-left (maxLat, minLon)
-    // bbox.geohashes[2] = top-right (maxLat, maxLon)
-    if (bbox.geohashes && bbox.geohashes.length >= 3) {
+    // Desenhar os 3 geohashes da bounding box com hachura (SE habilitado)
+    if (polygonState.visualToggles.showBBoxGeohashes && bbox.geohashes && bbox.geohashes.length >= 3) {
+      // bbox.geohashes[0] = bottom-left (minLat, minLon)
+      // bbox.geohashes[1] = top-left (maxLat, minLon)
+      // bbox.geohashes[2] = top-right (maxLat, maxLon)
       bbox.geohashes.forEach((geohash, idx) => {
         const zOrderIndex = bytes32ToZOrderIndex(geohash, precision);
         const { gridX, gridY } = zOrderToGrid(zOrderIndex, precision);
@@ -596,29 +651,31 @@ function renderPolygonState() {
       });
     }
     
-    // Desenhar retângulo da bounding box completa
-    const topLeft = GeohashUtils.latLonToCanvas(
-      Number(bbox.maxLat) / 1e18,
-      Number(bbox.minLon) / 1e18
-    );
-    const bottomRight = GeohashUtils.latLonToCanvas(
-      Number(bbox.minLat) / 1e18,
-      Number(bbox.maxLon) / 1e18
-    );
-    
-    const bboxWidth = bottomRight.x - topLeft.x;
-    const bboxHeight = bottomRight.y - topLeft.y;
-    
-    // Borda sólida da bounding box (azul)
-    ctx.strokeStyle = 'rgba(33, 150, 243, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([]);
-    ctx.strokeRect(topLeft.x, topLeft.y, bboxWidth, bboxHeight);
-    
-    // Label "BBox"
-    ctx.fillStyle = 'rgba(33, 150, 243, 1)';
-    ctx.font = 'bold 11px Arial';
-    ctx.fillText('BBox', topLeft.x + 4, topLeft.y - 4);
+    // Desenhar retângulo da bounding box completa (SE habilitado)
+    if (polygonState.visualToggles.showBBoxRect) {
+      const topLeft = GeohashUtils.latLonToCanvas(
+        Number(bbox.maxLat) / 1e18,
+        Number(bbox.minLon) / 1e18
+      );
+      const bottomRight = GeohashUtils.latLonToCanvas(
+        Number(bbox.minLat) / 1e18,
+        Number(bbox.maxLon) / 1e18
+      );
+      
+      const bboxWidth = bottomRight.x - topLeft.x;
+      const bboxHeight = bottomRight.y - topLeft.y;
+      
+      // Borda sólida da bounding box (azul)
+      ctx.strokeStyle = 'rgba(33, 150, 243, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.strokeRect(topLeft.x, topLeft.y, bboxWidth, bboxHeight);
+      
+      // Label "BBox"
+      ctx.fillStyle = 'rgba(33, 150, 243, 1)';
+      ctx.font = 'bold 11px Arial';
+      ctx.fillText('BBox', topLeft.x + 4, topLeft.y - 4);
+    }
     
     ctx.restore();
     ctx.setLineDash([]);
@@ -632,13 +689,27 @@ function renderPolygonState() {
     
     const cellSize = GeohashUtils.getCellSize(precision);
     
+    // Criar mapa de geohashes para verificar isEdge (se contraste estiver ativo)
+    let edgeMap = new Map();
+    if (polygonState.visualToggles.showEdgeContrast && polygonState.debugInfo && polygonState.debugInfo.info) {
+      polygonState.debugInfo.info.forEach(info => {
+        edgeMap.set(info.geohash, info.isEdge);
+      });
+    }
+    
     polygonState.geohashResults.forEach(geohash => {
       const zOrderIndex = bytes32ToZOrderIndex(geohash, precision);
       const { gridX, gridY } = zOrderToGrid(zOrderIndex, precision);
       const x = gridX * cellSize.width;
       const y = gridY * cellSize.height;
       
-      ctx.fillStyle = '#4CAF50';
+      // Aplicar contraste se habilitado e for edge
+      if (polygonState.visualToggles.showEdgeContrast && edgeMap.has(geohash) && edgeMap.get(geohash)) {
+        ctx.fillStyle = '#388E3C'; // Verde mais escuro para arestas
+      } else {
+        ctx.fillStyle = '#4CAF50'; // Verde normal
+      }
+      
       ctx.fillRect(x, y, cellSize.width, cellSize.height);
     });
     
@@ -646,8 +717,8 @@ function renderPolygonState() {
     ctx.setLineDash([]); // Garantir linha sólida após restore
   }
   
-  // 3. Desenhar labels de debug (se houver)
-  if (polygonState.debugInfo) {
+  // 3. Desenhar labels de debug (se houver e SE habilitado)
+  if (polygonState.debugInfo && polygonState.visualToggles.showLabels) {
     ctx.save();
     ctx.setLineDash([]); // Garantir linha sólida
     
@@ -1144,6 +1215,54 @@ function addLogEntry(message, type = 'info') {
     setTimeout(() => {
       logSection.scrollTop = logSection.scrollHeight;
     }, 0);
+  }
+}
+
+/**
+ * Salva o canvas como imagem PNG no servidor
+ * global fetch
+ */ 
+async function downloadCanvas() {
+  const canvas = document.getElementById('canvas');
+  if (!canvas) {
+    addLogEntry('❌ Canvas não encontrado!', 'error');
+    return;
+  }
+  
+  // Criar timestamp para nome do arquivo
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+  const filename = `besu-geohash-${timestamp}.png`;
+  
+  addLogEntry(`📷 Gerando imagem...`, 'info');
+  
+  try {
+    // Converter canvas para base64
+    const imageData = canvas.toDataURL('image/png');
+    
+    // Enviar para o servidor
+    const response = await fetch('http://localhost:3001/api/save-canvas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        imageData,
+        filename
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      addLogEntry(`✅ Imagem salva em: ${result.path}`, 'success');
+      console.log('📁 Caminho completo:', result.message);
+    } else {
+      addLogEntry(`❌ Erro ao salvar: ${result.error}`, 'error');
+      console.error('Detalhes:', result.details);
+    }
+  } catch (error) {
+    addLogEntry(`❌ Erro ao salvar imagem!`, 'error');
+    console.error('Erro:', error);
   }
 }
 

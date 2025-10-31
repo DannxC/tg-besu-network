@@ -14,6 +14,10 @@ let currentPrecision = 8;
 function initGrid(canvasElement) {
   canvas = canvasElement;
   ctx = canvas.getContext('2d');
+  
+  // Escalar contexto para alta resolução (canvas interno é 2x maior que visual)
+  const scaleFactor = 2;
+  ctx.scale(scaleFactor, scaleFactor);
 }
 
 /**
@@ -28,12 +32,14 @@ function drawGrid(precision) {
 
   currentPrecision = precision;
   
-  // Limpar canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Limpar canvas (usar dimensões lógicas, não físicas)
+  const logicalWidth = 900;
+  const logicalHeight = 600;
+  ctx.clearRect(0, 0, logicalWidth, logicalHeight);
   
   // Preencher fundo branco
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, logicalWidth, logicalHeight);
   
   const gridCount = GeohashUtils.getGridCount(precision);
   const cellSize = GeohashUtils.getCellSize(precision);

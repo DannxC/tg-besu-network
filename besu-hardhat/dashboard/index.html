@@ -77,6 +77,9 @@
   
   <!-- Área do canvas -->
   <div id="canvas-container">
+    <!-- Botão de download no canto superior direito -->
+    <button id="canvas-download-btn" class="download-canvas-btn">Download Canvas</button>
+    
     <!-- Tabs de teste -->
     <div class="test-tabs">
       <!-- TABS ANTIGAS COMENTADAS (para uso futuro)
@@ -112,6 +115,28 @@
       
       <div class="debug-info-panel-content">
         <div class="debug-info-section">
+          <div class="debug-info-title">👁️ Mostrar Recursos</div>
+          <div class="debug-visual-toggles">
+            <label class="debug-toggle-item">
+              <input type="checkbox" id="debug-show-bbox-rect" checked>
+              <span>Quadrado BBox</span>
+            </label>
+            <label class="debug-toggle-item">
+              <input type="checkbox" id="debug-show-bbox-geohashes" checked>
+              <span>Geohashes BBox</span>
+            </label>
+            <label class="debug-toggle-item">
+              <input type="checkbox" id="debug-show-labels" checked>
+              <span>Labels</span>
+            </label>
+            <label class="debug-toggle-item">
+              <input type="checkbox" id="debug-show-edge-contrast">
+              <span>Contraste Arestas</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="debug-info-section">
           <div class="debug-info-title">📦 Bounding Box</div>
           <div id="debug-bbox-info" class="debug-info-content">-</div>
         </div>
@@ -128,7 +153,7 @@
       </div>
     </div>
     
-    <canvas id="canvas" width="900" height="600"></canvas>
+    <canvas id="canvas" width="1800" height="1200"></canvas>
     
     <!-- Botões flutuantes removidos (botão Limpar já existe nos controles do polygon) -->
 

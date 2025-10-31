@@ -68,6 +68,42 @@ body {
   min-height: calc(100vh - 320px); /* Ajustado para compensar o padding-top maior */
 }
 
+#canvas {
+  width: 900px;
+  height: 600px;
+  border: 2px solid #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Botão de download no canto superior direito */
+.download-canvas-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #2196F3;
+  color: white;
+  border: 2px solid #1976D2;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+  z-index: 50;
+}
+
+.download-canvas-btn:hover {
+  background: #1976D2;
+  border-color: #0d47a1;
+  box-shadow: 0 4px 10px rgba(33, 150, 243, 0.5);
+  transform: translateY(-1px);
+}
+
+.download-canvas-btn:active {
+  transform: translateY(0);
+}
+
 /* Accordion */
 .accordion-item {
   border-bottom: 1px solid #333;
@@ -1202,12 +1238,16 @@ input[type="range"]::-webkit-slider-thumb:hover {
   resize: both;
   min-width: 200px;
   min-height: 150px;
+  display: flex;
+  flex-direction: column;
 }
 
 .debug-info-panel-content {
   padding: 12px;
   overflow-y: auto;
-  max-height: calc(100% - 40px);
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .debug-info-header {
@@ -1222,6 +1262,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .debug-panel-toggle {
@@ -1265,6 +1306,40 @@ input[type="range"]::-webkit-slider-thumb:hover {
   margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.debug-visual-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.debug-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+  font-size: 11px;
+  color: #ccc;
+}
+
+.debug-toggle-item:hover {
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.debug-toggle-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #8b5cf6;
+}
+
+.debug-toggle-item span {
+  user-select: none;
 }
 
 .debug-info-content {

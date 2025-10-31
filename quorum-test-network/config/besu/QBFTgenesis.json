@@ -23,7 +23,7 @@
     },
     "nonce" : "0x0",
     "timestamp" : "0x58ee40ba",
-    "gasLimit" : "0xf7b760",
+    "gasLimit" : "0xFFFFFFFF",
     "difficulty" : "0x1",
     "number": "0x0",
     "gasUsed": "0x0",

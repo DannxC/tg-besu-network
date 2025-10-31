@@ -726,6 +726,11 @@ contract GeohashConverter {
                 continue;
             }
 
+            // Verificar se o label tem pelo menos um geohash antes de acessar
+            if (labelToGeohashes[i].length == 0) {
+                continue;
+            }
+
             // Aqui, temos os possíveis candidatos a regiões internas. Vamos verificar se são realmente internos
             if (isInternGeohash(latitudes, longitudes, labelToGeohashes[i][0], precision)) {                
                 // Aqui, o label é uma região interna. Marcar como true todos os geohashes referentes a este label
@@ -815,6 +820,9 @@ contract GeohashConverter {
 
         // Copiar debug info se necessário
         if (debug) {
+            // Validar edgeGeohashCount
+            require(edgeGeohashCount <= comprehensiveGeohashes.length, "Edge count exceeds comprehensive geohashes");
+            
             // Criar array dos edge geohashes (primeiros edgeGeohashCount do comprehensiveGeohashes)
             bytes32[] memory edgeGeohashes = new bytes32[](edgeGeohashCount);
             for (i = 0; i < edgeGeohashCount; i++) {
@@ -823,7 +831,8 @@ contract GeohashConverter {
             
             // Primeiro, marcar quais geohashes do tempDebugInfo são edges
             for (i = 0; i < tempDebugInfo.length; i++) {
-                for (uint256 j = 0; j < edgeGeohashCount; j++) {
+                tempDebugInfo[i].isEdge = false; // Default: não é edge
+                for (uint256 j = 0; j < edgeGeohashCount && j < edgeGeohashes.length; j++) {
                     if (tempDebugInfo[i].geohash == edgeGeohashes[j]) {
                         tempDebugInfo[i].isEdge = true;
                         break;
@@ -834,7 +843,7 @@ contract GeohashConverter {
             // Agora, adicionar os edge geohashes que NÃO estão no tempDebugInfo
             // (ou seja, edges puros que não foram "redescobertos" pelo fillPolygon)
             uint256 missingEdges = 0;
-            for (i = 0; i < edgeGeohashCount; i++) {
+            for (i = 0; i < edgeGeohashCount && i < edgeGeohashes.length; i++) {
                 bool found = false;
                 for (uint256 j = 0; j < tempDebugInfo.length; j++) {
                     if (edgeGeohashes[i] == tempDebugInfo[j].geohash) {
@@ -851,13 +860,13 @@ contract GeohashConverter {
             debugInfo = new GeohashDebugInfo[](tempDebugInfo.length + missingEdges);
             
             // Copiar tempDebugInfo
-            for (i = 0; i < tempDebugInfo.length; i++) {
+            for (i = 0; i < tempDebugInfo.length && i < debugInfo.length; i++) {
                 debugInfo[i] = tempDebugInfo[i];
             }
             
             // Adicionar missing edges
             uint256 debugIdx = tempDebugInfo.length;
-            for (i = 0; i < edgeGeohashCount; i++) {
+            for (i = 0; i < edgeGeohashCount && i < edgeGeohashes.length; i++) {
                 bool found = false;
                 for (uint256 j = 0; j < tempDebugInfo.length; j++) {
                     if (edgeGeohashes[i] == tempDebugInfo[j].geohash) {
@@ -865,7 +874,7 @@ contract GeohashConverter {
                         break;
                     }
                 }
-                if (!found) {
+                if (!found && debugIdx < debugInfo.length) {
                     // Edge puro que não foi processado pelo fillPolygon
                     debugInfo[debugIdx] = GeohashDebugInfo({
                         geohash: edgeGeohashes[i],

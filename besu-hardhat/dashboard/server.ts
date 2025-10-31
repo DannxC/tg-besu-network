@@ -114,6 +114,52 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // API endpoint: Salvar canvas como imagem
+  if (req.url === '/api/save-canvas' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        const { imageData, filename } = JSON.parse(body);
+        
+        // Remover o prefixo "data:image/png;base64,"
+        const base64Data = imageData.replace(/^data:image\/png;base64,/, '');
+        
+        // Criar buffer da imagem
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Caminho para salvar
+        const imagesDir = path.join(__dirname, 'images');
+        const filePath = path.join(imagesDir, filename);
+        
+        // Garantir que o diretório existe
+        if (!fs.existsSync(imagesDir)) {
+          fs.mkdirSync(imagesDir, { recursive: true });
+        }
+        
+        // Salvar arquivo
+        fs.writeFileSync(filePath, buffer);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          path: `dashboard/images/${filename}`,
+          message: `Imagem salva em: ${filePath}`
+        }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false,
+          error: 'Failed to save image', 
+          details: (error as Error).message 
+        }));
+      }
+    });
+    return;
+  }
+
   // Servir ethers.js do node_modules
   if (req.url === '/ethers.umd.min.js') {
     serveFile(res, path.join(__dirname, '../node_modules/ethers/dist/ethers.umd.min.js'));
