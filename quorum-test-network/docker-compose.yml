@@ -85,6 +85,14 @@ services:
     networks:
       quorum-dev-quickstart:
         ipv4_address: 172.16.239.11
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   validator2:
     << : *besu-def
@@ -105,6 +113,14 @@ services:
     networks:
       quorum-dev-quickstart:
         ipv4_address: 172.16.239.12
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   validator3:
     << : *besu-def
@@ -125,6 +141,14 @@ services:
     networks:
       quorum-dev-quickstart:
         ipv4_address: 172.16.239.13
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   validator4:
     << : *besu-def
@@ -145,6 +169,14 @@ services:
     networks:
       quorum-dev-quickstart:
         ipv4_address: 172.16.239.14
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   rpcnode:
     << : *besu-def
@@ -163,6 +195,14 @@ services:
     networks:
       quorum-dev-quickstart:
         ipv4_address: 172.16.239.15
+    deploy:
+      resources:
+        limits:
+          cpus: '5.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 
   ethsignerProxy:
     << : *ethsignerProxy-def

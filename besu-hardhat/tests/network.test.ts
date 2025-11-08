@@ -18,58 +18,58 @@ interface DeploymentInfo {
 describe("Network Integration Tests", function() {
   this.timeout(30000);
 
-  describe("1. Conexão e Configuração Básica", function() {
-    it("Deve conectar à rede Besu via RPC", async function() {
+  describe("1. Connection and Basic Configuration", function() {
+    it("Should connect to Besu network via RPC", async function() {
       const provider = ethers.provider;
       const network = await provider.getNetwork();
       
-      console.log(`   ✅ Conectado! Chain ID: ${network.chainId}`);
+      console.log(`   ✅ Connected! Chain ID: ${network.chainId}`);
       expect(network.chainId).to.equal(1337);
     });
 
-    it("Deve ter acesso ao RPC_URL configurado", function() {
+    it("Should have access to configured RPC_URL", function() {
       const rpcUrl = process.env.RPC_URL;
       expect(rpcUrl).to.exist;
       expect(rpcUrl).to.equal("http://127.0.0.1:8545");
       console.log(`   ✅ RPC URL: ${rpcUrl}`);
     });
 
-    it("Rede deve estar minerando blocos", async function() {
+    it("Network should be mining blocks", async function() {
       const blockNumber = await ethers.provider.getBlockNumber();
       expect(blockNumber).to.be.greaterThan(0);
-      console.log(`   ✅ Bloco atual: ${blockNumber}`);
+      console.log(`   ✅ Current block: ${blockNumber}`);
     });
   });
 
-  describe("2. Validação das Contas Configuradas", function() {
-    it("MEMBER1_PK deve estar configurada no .env", function() {
+  describe("2. Validation of Configured Accounts", function() {
+    it("MEMBER1_PK should be configured in .env", function() {
       expect(process.env.MEMBER1_PK).to.exist;
       expect(process.env.MEMBER1_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
-      console.log("   ✅ MEMBER1_PK válida");
+      console.log("   ✅ MEMBER1_PK valid");
     });
 
-    it("MEMBER2_PK deve estar configurada no .env", function() {
+    it("MEMBER2_PK should be configured in .env", function() {
       expect(process.env.MEMBER2_PK).to.exist;
       expect(process.env.MEMBER2_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
-      console.log("   ✅ MEMBER2_PK válida");
+      console.log("   ✅ MEMBER2_PK valid");
     });
 
-    it("MEMBER3_PK deve estar configurada no .env", function() {
+    it("MEMBER3_PK should be configured in .env", function() {
       expect(process.env.MEMBER3_PK).to.exist;
       expect(process.env.MEMBER3_PK).to.match(/^0x[a-fA-F0-9]{64}$/);
-      console.log("   ✅ MEMBER3_PK válida");
+      console.log("   ✅ MEMBER3_PK valid");
     });
 
-    it("Todas as contas devem estar acessíveis via Hardhat", async function() {
+    it("All accounts should be accessible via Hardhat", async function() {
       const signers = await ethers.getSigners();
       expect(signers.length).to.be.at.least(3);
       
       const addresses = await Promise.all(signers.map(s => s.getAddress()));
-      console.log(`   ✅ ${signers.length} contas disponíveis:`);
+      console.log(`   ✅ ${signers.length} accounts available:`);
       addresses.forEach((addr, i) => console.log(`      ${i + 1}. ${addr}`));
     });
 
-    it("Todas as contas devem ter saldo (pré-funded)", async function() {
+    it("All accounts should have balance (pre-funded)", async function() {
       const signers = await ethers.getSigners();
       
       for (let i = 0; i < Math.min(3, signers.length); i++) {
@@ -82,24 +82,24 @@ describe("Network Integration Tests", function() {
     });
   });
 
-  describe("3. Validação dos Deployments Existentes", function() {
+  describe("3. Validation of Existing Deployments", function() {
     const deploymentsDir = path.join(__dirname, "..", "deployments");
 
-    it("Pasta deployments deve existir", function() {
+    it("Deployments folder should exist", function() {
       const exists = fs.existsSync(deploymentsDir);
       
       if (!exists) {
-        console.log("   ⚠️  Pasta deployments não existe (nenhum contrato deployado ainda)");
+        console.log("   ⚠️  Deployments folder does not exist (no contracts deployed yet)");
         this.skip();
       }
       
       expect(exists).to.be.true;
-      console.log(`   ✅ Pasta deployments encontrada: ${deploymentsDir}`);
+      console.log(`   ✅ Deployments folder found: ${deploymentsDir}`);
     });
 
-    it("Deve validar todos os contratos deployados", async function() {
+    it("Should validate all deployed contracts", async function() {
       if (!fs.existsSync(deploymentsDir)) {
-        console.log("   ⏭️  Sem deployments para validar");
+        console.log("   ⏭️  No deployments to validate");
         this.skip();
         return;
       }
@@ -107,12 +107,12 @@ describe("Network Integration Tests", function() {
       const files = fs.readdirSync(deploymentsDir).filter(f => f.endsWith(".json"));
       
       if (files.length === 0) {
-        console.log("   ⚠️  Nenhum deployment encontrado");
+        console.log("   ⚠️  No deployments found");
         this.skip();
         return;
       }
 
-      console.log(`   📋 Validando ${files.length} deployment(s)...\n`);
+      console.log(`   📋 Validating ${files.length} deployment(s)...\n`);
 
       for (const file of files) {
         const filePath = path.join(deploymentsDir, file);
@@ -123,28 +123,28 @@ describe("Network Integration Tests", function() {
         console.log(`      Network: ${deployment.network}`);
         console.log(`      Block: ${deployment.blockNumber}`);
 
-        // Verificar se o contrato existe na rede
+        // Check if contract exists on network
         const code = await ethers.provider.getCode(deployment.address);
         
         if (code === "0x") {
-          console.log(`      ❌ ERRO: Contrato não existe na rede atual!`);
-          console.log(`      💡 Dica: A rede foi resetada? Execute novo deploy.`);
-          throw new Error(`Contrato ${file} não existe no endereço ${deployment.address}`);
+          console.log(`      ❌ ERROR: Contract does not exist on current network!`);
+          console.log(`      💡 Tip: Was the network reset? Run new deploy.`);
+          throw new Error(`Contract ${file} does not exist at address ${deployment.address}`);
         }
         
-        console.log(`      ✅ Contrato existe e está ativo`);
+        console.log(`      ✅ Contract exists and is active`);
         console.log(`      📦 Bytecode: ${code.length} bytes\n`);
 
-        // Verificar se o deployer ainda tem saldo
+        // Check if deployer still has balance
         const deployerBalance = await ethers.provider.getBalance(deployment.deployer);
         console.log(`      👤 Deployer: ${deployment.deployer}`);
         console.log(`      💰 Balance: ${ethers.utils.formatEther(deployerBalance)} ETH\n`);
       }
 
-      console.log(`   ✅ Todos os ${files.length} deployment(s) validados com sucesso!`);
+      console.log(`   ✅ All ${files.length} deployment(s) validated successfully!`);
     });
 
-    it("Deve validar chainId dos deployments contra a rede atual", async function() {
+    it("Should validate deployment chainIds against current network", async function() {
       if (!fs.existsSync(deploymentsDir)) {
         this.skip();
         return;
@@ -165,26 +165,26 @@ describe("Network Integration Tests", function() {
         const deployment: DeploymentInfo = JSON.parse(fs.readFileSync(filePath, "utf8"));
         
         if (deployment.chainId && deployment.chainId !== currentChainId) {
-          console.log(`   ⚠️  AVISO: ${file} foi deployado em chainId ${deployment.chainId}, mas a rede atual é ${currentChainId}`);
-          console.log(`   💡 Dica: Você pode estar conectado a uma rede diferente ou ela foi resetada.`);
-          throw new Error(`ChainId mismatch para ${file}`);
+          console.log(`   ⚠️  WARNING: ${file} was deployed on chainId ${deployment.chainId}, but current network is ${currentChainId}`);
+          console.log(`   💡 Tip: You may be connected to a different network or it was reset.`);
+          throw new Error(`ChainId mismatch for ${file}`);
         }
       }
 
-      console.log(`   ✅ ChainId consistente em todos os deployments (${currentChainId})`);
+      console.log(`   ✅ ChainId consistent across all deployments (${currentChainId})`);
     });
   });
 
-  describe("4. Testes de Conectividade Avançada", function() {
-    it("Deve conseguir enviar uma transação simples", async function() {
+  describe("4. Advanced Connectivity Tests", function() {
+    it("Should be able to send a simple transaction", async function() {
       const [signer] = await ethers.getSigners();
       const nonce = await signer.getTransactionCount();
       
-      console.log(`   ✅ Nonce atual: ${nonce}`);
+      console.log(`   ✅ Current nonce: ${nonce}`);
       expect(nonce).to.be.a("number");
     });
 
-    it("Deve conseguir estimar gas para transações", async function() {
+    it("Should be able to estimate gas for transactions", async function() {
       const [from, to] = await ethers.getSigners();
       
       const gasEstimate = await ethers.provider.estimateGas({
@@ -194,10 +194,10 @@ describe("Network Integration Tests", function() {
       });
       
       expect(gasEstimate.toNumber()).to.be.greaterThan(0);
-      console.log(`   ✅ Gas estimado: ${gasEstimate.toString()}`);
+      console.log(`   ✅ Estimated gas: ${gasEstimate.toString()}`);
     });
 
-    it("Deve conseguir buscar blocos recentes", async function() {
+    it("Should be able to fetch recent blocks", async function() {
       const blockNumber = await ethers.provider.getBlockNumber();
       const block = await ethers.provider.getBlock(blockNumber);
       
@@ -205,13 +205,13 @@ describe("Network Integration Tests", function() {
       expect(block.number).to.equal(blockNumber);
       expect(block.transactions).to.be.an("array");
       
-      console.log(`   ✅ Bloco ${blockNumber}:`);
+      console.log(`   ✅ Block ${blockNumber}:`);
       console.log(`      Hash: ${block.hash}`);
       console.log(`      Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
-      console.log(`      Transações: ${block.transactions.length}`);
+      console.log(`      Transactions: ${block.transactions.length}`);
     });
 
-    it("Deve ter gasPrice configurado como 0 (zero base fee)", async function() {
+    it("Should have gasPrice configured as 0 (zero base fee)", async function() {
       const [signer] = await ethers.getSigners();
       const gasPrice = await signer.getGasPrice();
       
@@ -222,8 +222,8 @@ describe("Network Integration Tests", function() {
 
   after(function() {
     console.log("\n" + "=".repeat(60));
-    console.log("✅ Todos os testes de rede passaram!");
-    console.log("🚀 A rede Besu está funcionando corretamente");
+    console.log("✅ All network tests passed!");
+    console.log("🚀 Besu network is working correctly");
     console.log("=".repeat(60));
   });
 });

@@ -4,28 +4,28 @@ import { Signer, Event } from "ethers";
 import type { DSS_Storage } from "../typechain-types";
 
 /**
- * Helper: Converte string para bytes32 (geohashes e IDs)
- * Para strings curtas (<32 bytes), usa padding com zeros à direita
- * Para strings longas, usa keccak256 hash
+ * Helper: Converts string to bytes32 (geohashes and IDs)
+ * For short strings (<32 bytes), uses padding with zeros on the right
+ * For long strings, uses keccak256 hash
  */
 function toBytes32(str: string): string {
   if (str.length > 31) {
-    // String muito longa: usar hash keccak256
+    // Very long string: use keccak256 hash
     return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(str));
   }
-  // String curta: padding com zeros à direita
+  // Short string: padding with zeros on the right
   return ethers.utils.formatBytes32String(str);
 }
 
 /**
- * Helper: Gera timestamp em milissegundos (uint64)
- * Date.now() retorna milissegundos, que é o formato esperado pelo contrato
+ * Helper: Generate timestamp in milliseconds (uint64)
+ * Date.now() returns milliseconds, which is the format expected by the contract
  */
 function nowMs(): number {
   return Date.now();
 }
 
-describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() {
+describe("DSS_Storage - Functional Tests on Besu Network (Optimized)", function() {
   let dssStorage: DSS_Storage;
   let owner: Signer;
   let ownerAddress: string;
@@ -34,7 +34,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
   let user2: Signer;
   let user2Address: string;
 
-  // Deploy fresh contract antes de todos os testes
+  // Deploy fresh contract before all tests
   before(async function() {
     console.log("\n🚀 Deploying DSS_Storage (Optimized Version)...");
     
@@ -55,28 +55,28 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     console.log("👤 Owner (Member1):", ownerAddress);
     console.log("👤 User1 (Member2):", user1Address);
     console.log("👤 User2 (Member3):", user2Address);
-    console.log("📝 Usando bytes32 para geohashes/IDs e uint64 para timestamps");
+    console.log("📝 Using bytes32 for geohashes/IDs and uint64 for timestamps");
   });
 
-  describe("1. Configuração Inicial", function() {
-    it("Deve ter setado o owner corretamente", async function() {
+  describe("1. Initial Configuration", function() {
+    it("Should have set the owner correctly", async function() {
       const contractOwner = await dssStorage.owner();
       expect(contractOwner).to.equal(ownerAddress);
     });
 
-    it("Owner deve estar na lista de allowedUsers", async function() {
+    it("Owner should be in the allowedUsers list", async function() {
       const isAllowed = await dssStorage.allowedUsers(ownerAddress);
       expect(isAllowed).to.be.true;
     });
 
-    it("User1 não deve estar na lista de allowedUsers", async function() {
+    it("User1 should not be in the allowedUsers list", async function() {
       const isAllowed = await dssStorage.allowedUsers(user1Address);
       expect(isAllowed).to.be.false;
     });
   });
 
-  describe("2. Gestão de Usuários", function() {
-    it("Owner deve poder adicionar user1 aos allowedUsers", async function() {
+  describe("2. User Management", function() {
+    it("Owner should be able to add user1 to allowedUsers", async function() {
       const tx = await dssStorage.allowUser(user1Address);
       await tx.wait();
       
@@ -84,7 +84,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(isAllowed).to.be.true;
     });
 
-    it("Não-owner não deve poder adicionar usuários", async function() {
+    it("Non-owner should not be able to add users", async function() {
       let reverted = false;
       try {
         const tx = await dssStorage.connect(user1).allowUser(user2Address);
@@ -97,18 +97,18 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(reverted).to.be.true;
     });
 
-    it("Owner deve poder remover user1 dos allowedUsers", async function() {
+    it("Owner should be able to remove user1 from allowedUsers", async function() {
       const tx = await dssStorage.disallowUser(user1Address);
       await tx.wait();
       
       const isAllowed = await dssStorage.allowedUsers(user1Address);
       expect(isAllowed).to.be.false;
       
-      // Adicionar de volta para os próximos testes
+      // Add back for next tests
       await dssStorage.allowUser(user1Address);
     });
 
-    it("Owner NÃO deve poder remover a si mesmo de allowedUsers", async function() {
+    it("Owner should NOT be able to remove themselves from allowedUsers", async function() {
       let reverted = false;
       try {
         const tx = await dssStorage.disallowUser(ownerAddress);
@@ -122,9 +122,9 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("3. CRUD - Adicionar Dados (Upsert)", function() {
+  describe("3. CRUD - Add Data (Upsert)", function() {
     const testData = {
-      geohashes: [toBytes32(toBytes32("u4pruydqqvj")), toBytes32(toBytes32("u4pruydqqvm")), toBytes32(toBytes32("u4pruydqqvq"))],
+      geohashes: [toBytes32("u4pruydqqvj"), toBytes32("u4pruydqqvm"), toBytes32("u4pruydqqvq")],
       minHeight: 100,
       maxHeight: 500,
       startTime: nowMs(),
@@ -134,7 +134,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       id: toBytes32("id-1001")
     };
 
-    it("Deve permitir adicionar dados de polígono", async function() {
+    it("Should allow adding polygon data", async function() {
       const tx = await dssStorage.upsertOIR(
         testData.geohashes,
         testData.minHeight,
@@ -147,14 +147,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       
       const receipt = await tx.wait();
-      console.log(`   Gas usado: ${receipt.gasUsed.toString()}`);
+      console.log(`   Gas used: ${receipt.gasUsed.toString()}`);
       
-      // Verificar evento DataAdded
+      // Verify DataAdded event
       const addedEvents = receipt.events?.filter((e: Event) => e.event === "DataAdded");
       expect(addedEvents?.length).to.equal(testData.geohashes.length);
     });
 
-    it("Deve retornar dados corretos ao consultar", async function() {
+    it("Should return correct data when querying", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         testData.geohashes[0],
         testData.minHeight,
@@ -169,12 +169,12 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids[0]).to.equal(testData.id);
     });
 
-    it("Deve rejeitar se usuário não estiver na allowedList", async function() {
+    it("Should reject if user is not in allowedList", async function() {
       let reverted = false;
       try {
         const now = nowMs();
         const tx = await dssStorage.connect(user2).upsertOIR(
-          [toBytes32(toBytes32("u4pruydqqva"))],
+          [toBytes32("u4pruydqqva")],
           100, 500,
           now, now + 3600000,
           "https://example.com/unauthorized",
@@ -190,25 +190,25 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("4. CRUD - Atualizar Dados", function() {
-    it("Deve permitir atualizar dados existentes", async function() {
+  describe("4. CRUD - Update Data", function() {
+    it("Should allow updating existing data", async function() {
       const updatedUrl = "https://example.com/data/001-updated";
       
       const tx = await dssStorage.upsertOIR(
-        [toBytes32("u4pruydqqvj"), toBytes32("u4pruydqqvm")], // Menos geohashes
+        [toBytes32("u4pruydqqvj"), toBytes32("u4pruydqqvm")], // Fewer geohashes
         100,
         500,
         nowMs(),
         nowMs() + 3600000,
         updatedUrl,
         1,
-        toBytes32("id-1001") // Mesmo ID do teste anterior
+        toBytes32("id-1001") // Same ID from previous test
       );
       
       const receipt = await tx.wait();
-      console.log(`   Gas usado (update): ${receipt.gasUsed.toString()}`);
+      console.log(`   Gas used (update): ${receipt.gasUsed.toString()}`);
       
-      // Verificar se atualizou
+      // Verify it was updated
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvj"),
         100,
@@ -220,7 +220,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal(updatedUrl);
     });
 
-    it("Deve emitir evento DataUpdated", async function() {
+    it("Should emit DataUpdated event", async function() {
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4pruydqqvj")],
         100,
@@ -236,7 +236,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(updatedEvents?.length).to.be.greaterThan(0);
     });
 
-    it("User1 PODE atualizar dados do owner (qualquer allowedUser pode modificar qualquer OIR)", async function() {
+    it("User1 CAN update owner's data (any allowedUser can modify any OIR)", async function() {
       const updatedUrl = "https://example.com/user1-modified-owners-data";
       
       const tx = await dssStorage.connect(user1).upsertOIR(
@@ -249,7 +249,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx.wait();
       
-      // Verificar que foi atualizado
+      // Verify it was updated
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvj"),
         100,
@@ -262,7 +262,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("5. CRUD - Deletar Dados", function() {
+  describe("5. CRUD - Delete Data", function() {
     const deleteTestData = {
       geohashes: [toBytes32("u4pruydqqvz")],
       minHeight: 200,
@@ -274,7 +274,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       id: toBytes32("id-9999")
     };
 
-    it("Deve adicionar dados para depois deletar", async function() {
+    it("Should add data to delete later", async function() {
       const tx = await dssStorage.upsertOIR(
         deleteTestData.geohashes,
         deleteTestData.minHeight,
@@ -288,7 +288,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       
       await tx.wait();
       
-      // Verificar que foi adicionado
+      // Verify it was added
       const result = await dssStorage.getOIRsByGeohash(
         deleteTestData.geohashes[0],
         deleteTestData.minHeight,
@@ -300,18 +300,18 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids.length).to.be.greaterThan(0);
     });
 
-    it("Deve permitir deletar dados por ID", async function() {
+    it("Should allow deleting data by ID", async function() {
       const tx = await dssStorage.deleteOIR([deleteTestData.id]);
       const receipt = await tx.wait();
       
-      console.log(`   Gas usado (delete): ${receipt.gasUsed.toString()}`);
+      console.log(`   Gas used (delete): ${receipt.gasUsed.toString()}`);
       
-      // Verificar evento DataDeleted
+      // Verify DataDeleted event
       const deletedEvents = receipt.events?.filter((e: Event) => e.event === "DataDeleted");
       expect(deletedEvents?.length).to.be.greaterThan(0);
     });
 
-    it("Dados deletados não devem mais aparecer nas consultas", async function() {
+    it("Deleted data should no longer appear in queries", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         deleteTestData.geohashes[0],
         deleteTestData.minHeight,
@@ -320,24 +320,24 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
         deleteTestData.endTime
       );
       
-      // Não deve conter o ID deletado
+      // Should not contain deleted ID
       expect(result.ids).to.not.include(toBytes32("id-99999"));
     });
 
-    it("Deletar ID inexistente não deve reverter (silenciosamente ignora)", async function() {
-      // ID 99999 não existe, então idToGeohash[99999].length == 0
-      // O loop em deleteOIR simplesmente não executa nenhuma iteração
+    it("Deleting non-existent ID should not revert (silently ignores)", async function() {
+      // ID 99999 doesn't exist, so idToGeohash[99999].length == 0
+      // The loop in deleteOIR simply doesn't execute any iteration
       const tx = await dssStorage.deleteOIR([toBytes32("id-99999")]);
       await tx.wait();
       
-      // Se chegou aqui, não reverteu (comportamento esperado)
+      // If we got here, it didn't revert (expected behavior)
       expect(true).to.be.true;
     });
   });
 
-  // TESTES PARALELOS - Consultas independentes
-  describe("6. Consultas Avançadas (Paralelas)", function() {
-    // Adicionar dados de teste em SEQUÊNCIA (evitar nonce collision)
+  // PARALLEL TESTS - Independent queries
+  describe("6. Advanced Queries (Parallel)", function() {
+    // Add test data in SEQUENCE (avoid nonce collision)
     before(async function() {
       const now = nowMs();
       
@@ -368,10 +368,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx3.wait();
       
-      console.log("   ✅ Dados de teste inseridos");
+      console.log("   ✅ Test data inserted");
     });
 
-    it("Deve retornar array vazio quando não há dados matching", async function() {
+    it("Should return empty array when there is no matching data", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("nonexistent"),
         0, 1000,
@@ -383,8 +383,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids.length).to.equal(0);
     });
 
-    it("Deve filtrar por intervalo de altura", async function() {
-      // Consultar com altura que não overlaps
+    it("Should filter by altitude range", async function() {
+      // Query with altitude that doesn't overlap
       const noMatch = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvh"),
         3000, 4000,
@@ -392,7 +392,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       expect(noMatch.urls.length).to.equal(0);
       
-      // Consultar com altura que overlaps
+      // Query with altitude that overlaps
       const match = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvh"),
         1500, 1600,
@@ -402,27 +402,27 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(match.urls[0]).to.equal("https://example.com/high-altitude");
     });
 
-    it("Deve filtrar por intervalo de tempo", async function() {
-      // Consultar tempo passado (não deve encontrar)
+    it("Should filter by time range", async function() {
+      // Query past time (should not find)
       const pastQuery = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvi"),
         0, 1000,
-        1, 100 // Timestamp muito antigo (1970)
+        1, 100 // Very old timestamp (1970)
       );
       expect(pastQuery.urls.length).to.equal(0);
       
-      // Consultar tempo que overlaps (range amplo para capturar o dado inserido no before)
+      // Query time that overlaps (wide range to capture data inserted in before)
       const futureQuery = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvi"),
         0, 1000,
-        0, 9999999999999 // Range amplo
+        0, 9999999999999 // Wide range
       );
       expect(futureQuery.urls.length).to.equal(1);
       expect(futureQuery.urls[0]).to.equal("https://example.com/future-data");
     });
 
-    it("Diferentes usuários devem poder consultar todos os dados", async function() {
-      // Owner consulta dados do user1
+    it("Different users should be able to query all data", async function() {
+      // Owner queries user1's data
       const ownerQuery = await dssStorage.getOIRsByGeohash(
         toBytes32("u4pruydqqvk"),
         500, 1500,
@@ -430,7 +430,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       expect(ownerQuery.urls[0]).to.equal("https://example.com/user1-data");
       
-      // User1 consulta dados do owner
+      // User1 queries owner's data
       const user1Query = await dssStorage.connect(user1).getOIRsByGeohash(
         toBytes32("u4pruydqqvh"),
         1000, 2000,
@@ -440,8 +440,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("7. Validações", function() {
-    it("Deve rejeitar intervalo de altura inválido", async function() {
+  describe("7. Validations", function() {
+    it("Should reject invalid altitude interval", async function() {
       let reverted = false;
       try {
         const tx = await dssStorage.upsertOIR(
@@ -461,7 +461,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(reverted).to.be.true;
     });
 
-    it("Deve rejeitar intervalo de tempo inválido", async function() {
+    it("Should reject invalid time interval", async function() {
       const now = nowMs();
       let reverted = false;
       
@@ -482,7 +482,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(reverted).to.be.true;
     });
 
-    it("Deve rejeitar array vazio de geohashes", async function() {
+    it("Should reject empty geohash array", async function() {
       let reverted = false;
       
       try {
@@ -504,15 +504,15 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("8. Transferência de Ownership", function() {
-    it("Owner deve poder transferir ownership", async function() {
+  describe("8. Ownership Transfer", function() {
+    it("Owner should be able to transfer ownership", async function() {
       const tx = await dssStorage.changeOwner(user1Address);
       await tx.wait();
       
       const currentOwner = await dssStorage.owner();
       expect(currentOwner).to.equal(user1Address);
       
-      // User1 (novo owner) transfere de volta
+      // User1 (new owner) transfers back
       const tx2 = await dssStorage.connect(user1).changeOwner(ownerAddress);
       await tx2.wait();
       
@@ -520,7 +520,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(restoredOwner).to.equal(ownerAddress);
     });
 
-    it("Deve rejeitar transferência para address(0)", async function() {
+    it("Should reject transfer to address(0)", async function() {
       let reverted = false;
       try {
         const tx = await dssStorage.changeOwner("0x0000000000000000000000000000000000000000");
@@ -533,8 +533,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(reverted).to.be.true;
     });
 
-    it("Deve rejeitar transferência para usuário que não está allowed", async function() {
-      // User2 ainda não foi adicionado aos allowedUsers neste ponto
+    it("Should reject transfer to user that is not allowed", async function() {
+      // User2 has not been added to allowedUsers at this point
       const isUser2Allowed = await dssStorage.allowedUsers(user2Address);
       expect(isUser2Allowed).to.be.false;
 
@@ -551,24 +551,24 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  // TESTE DE CONCORRÊNCIA - Diferentes usuários em paralelo
-  describe("9. Teste de Concorrência (Paralelo)", function() {
-    // Preparar user2 para os testes
+  // CONCURRENCY TEST - Different users in parallel
+  describe("9. Concurrency Test (Parallel)", function() {
+    // Prepare user2 for tests
     before(async function() {
       const tx = await dssStorage.allowUser(user2Address);
       await tx.wait();
-      console.log("   ✅ User2 adicionado aos allowedUsers");
+      console.log("   ✅ User2 added to allowedUsers");
     });
 
-    it("Múltiplos usuários diferentes devem poder inserir dados simultaneamente", async function() {
-      this.timeout(30000); // 30 segundos
+    it("Multiple different users should be able to insert data simultaneously", async function() {
+      this.timeout(30000); // 30 seconds
       
       const now = nowMs();
       
-      console.log("   🔥 Enviando 3 transações de usuários diferentes em paralelo...");
+      console.log("   🔥 Sending 3 transactions from different users in parallel...");
       const startTime = Date.now();
       
-      // Enviar transações de usuários DIFERENTES em paralelo (evita nonce collision)
+      // Send transactions from DIFFERENT users in parallel (avoids nonce collision)
       const [tx1, tx2, tx3] = await Promise.all([
         dssStorage.upsertOIR(
           [toBytes32("u4concurrency1")],
@@ -593,14 +593,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
         )
       ]);
       
-      // Aguardar confirmação
+      // Wait for confirmation
       const receipts = await Promise.all([tx1.wait(), tx2.wait(), tx3.wait()]);
       
       const endTime = Date.now();
-      console.log(`   ⏱️  Tempo total: ${endTime - startTime}ms`);
-      console.log(`   ⛽ Gas total: ${receipts.reduce((sum, r) => sum + r.gasUsed.toNumber(), 0)}`);
+      console.log(`   ⏱️  Total time: ${endTime - startTime}ms`);
+      console.log(`   ⛽ Total gas: ${receipts.reduce((sum, r) => sum + r.gasUsed.toNumber(), 0)}`);
       
-      // Verificar que todos os dados foram inseridos
+      // Verify that all data was inserted
       const results = await Promise.all([
         dssStorage.getOIRsByGeohash(toBytes32("u4concurrency1"), 0, 1000, now, now + 3600),
         dssStorage.getOIRsByGeohash(toBytes32("u4concurrency2"), 1000, 2000, now, now + 3600),
@@ -613,7 +613,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("10. Edge Cases - Upsert com Mudança de Geohashes", function() {
+  describe("10. Edge Cases - Upsert with Geohash Changes", function() {
     const baseOIR = {
       minHeight: 200,
       maxHeight: 400,
@@ -624,7 +624,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       id: toBytes32("id-30001")
     };
 
-    it("Deve criar OIR com 3 geohashes iniciais", async function() {
+    it("Should create OIR with 3 initial geohashes", async function() {
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4edge001"), toBytes32("u4edge002"), toBytes32("u4edge003")],
         baseOIR.minHeight, baseOIR.maxHeight,
@@ -633,7 +633,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx.wait();
 
-      // Verificar que está nos 3 geohashes
+      // Verify it's in all 3 geohashes
       const result1 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge001"), 0, 10000, 0, 9999999999999);
       const result2 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge002"), 0, 10000, 0, 9999999999999);
       const result3 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge003"), 0, 10000, 0, 9999999999999);
@@ -643,8 +643,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result3.ids[0]).to.equal(toBytes32("id-30001"));
     });
 
-    it("Deve atualizar OIR removendo 2 geohashes antigos e adicionando 2 novos", async function() {
-      // Update: remove edge001 e edge002, mantém edge003, adiciona edge004 e edge005
+    it("Should update OIR removing 2 old geohashes and adding 2 new ones", async function() {
+      // Update: remove edge001 and edge002, keep edge003, add edge004 and edge005
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4edge003"), toBytes32("u4edge004"), toBytes32("u4edge005")],
         baseOIR.minHeight, baseOIR.maxHeight,
@@ -654,13 +654,13 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx.wait();
 
-      // Verificar que foi removido dos antigos
+      // Verify it was removed from old ones
       const removed1 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge001"), 0, 10000, 0, 9999999999999);
       const removed2 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge002"), 0, 10000, 0, 9999999999999);
       expect(removed1.ids.length).to.equal(0);
       expect(removed2.ids.length).to.equal(0);
 
-      // Verificar que está nos novos
+      // Verify it's in new ones
       const kept = await dssStorage.getOIRsByGeohash(toBytes32("u4edge003"), 0, 10000, 0, 9999999999999);
       const new1 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge004"), 0, 10000, 0, 9999999999999);
       const new2 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge005"), 0, 10000, 0, 9999999999999);
@@ -671,8 +671,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(kept.urls[0]).to.equal("https://example.com/updated");
     });
 
-    it("Deve manter consistência: idToGeohash deve ter exatamente 3 geohashes", async function() {
-      // Verificar consistência via queries
+    it("Should maintain consistency: idToGeohash should have exactly 3 geohashes", async function() {
+      // Verify consistency via queries
       const result3 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge003"), 0, 10000, 0, 9999999999999);
       const result4 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge004"), 0, 10000, 0, 9999999999999);
       const result5 = await dssStorage.getOIRsByGeohash(toBytes32("u4edge005"), 0, 10000, 0, 9999999999999);
@@ -683,8 +683,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("11. Edge Cases - Delete e Cleanup", function() {
-    it("Deve preparar OIR para testes de delete", async function() {
+  describe("11. Edge Cases - Delete and Cleanup", function() {
+    it("Should prepare OIR for delete tests", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4delete001"), toBytes32("u4delete002")],
@@ -696,11 +696,11 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx.wait();
     });
 
-    it("Deve deletar OIR e limpar idToData completamente", async function() {
+    it("Should delete OIR and completely clean idToData", async function() {
       const tx = await dssStorage.deleteOIR([toBytes32("id-40001")]);
       await tx.wait();
 
-      // Verificar que foi removido de todos os geohashes
+      // Verify it was removed from all geohashes
       const result1 = await dssStorage.getOIRsByGeohash(toBytes32("u4delete001"), 0, 10000, 0, 9999999999999);
       const result2 = await dssStorage.getOIRsByGeohash(toBytes32("u4delete002"), 0, 10000, 0, 9999999999999);
 
@@ -708,14 +708,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result2.ids.length).to.equal(0);
     });
 
-    it("Deve permitir reusar ID após delete completo", async function() {
+    it("Should allow reusing ID after complete delete", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4reuse001")],
         300, 700,
         now, now + 3600000,
         "https://example.com/reused-id",
-        70, toBytes32("id-40001")  // Mesmo ID deletado antes
+        70, toBytes32("id-40001")  // Same ID deleted before
       );
       await tx.wait();
 
@@ -724,21 +724,21 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal("https://example.com/reused-id");
     });
 
-    it("Deletar ID inexistente não reverte (comportamento silencioso)", async function() {
-      // ID inexistente simplesmente não faz nada
+    it("Deleting non-existent ID does not revert (silent behavior)", async function() {
+      // Non-existent ID simply does nothing
       const tx = await dssStorage.deleteOIR([toBytes32("id-99999")]);
       await tx.wait();
       
-      // Se chegou aqui, não reverteu (comportamento esperado)
+      // If we got here, it didn't revert (expected behavior)
       expect(true).to.be.true;
     });
   });
 
-  describe("12. Edge Cases - Query com Múltiplas OIRs", function() {
+  describe("12. Edge Cases - Query with Multiple OIRs", function() {
     before(async function() {
       const now = nowMs();
       
-      // Adicionar 3 OIRs no MESMO geohash com diferentes alturas/tempos
+      // Add 3 OIRs in the SAME geohash with different altitudes/times
       const tx1 = await dssStorage.upsertOIR(
         [toBytes32("u4multiquery")],
         0, 100,
@@ -766,10 +766,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx3.wait();
 
-      console.log("   ✅ 3 OIRs adicionadas ao mesmo geohash");
+      console.log("   ✅ 3 OIRs added to same geohash");
     });
 
-    it("Deve retornar todas as 3 OIRs com query ampla", async function() {
+    it("Should return all 3 OIRs with wide query", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4multiquery"),
         0, 1000,
@@ -780,7 +780,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls.length).to.equal(3);
     });
 
-    it("Deve filtrar apenas OIR de altura baixa", async function() {
+    it("Should filter only low altitude OIR", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4multiquery"),
         0, 50,
@@ -791,7 +791,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids[0]).to.equal(toBytes32("id-50001"));
     });
 
-    it("Deve filtrar apenas OIR de altura alta", async function() {
+    it("Should filter only high altitude OIR", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4multiquery"),
         250, 350,
@@ -802,28 +802,28 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids[0]).to.equal(toBytes32("id-50003"));
     });
 
-    it("Deve retornar 2 OIRs que fazem overlap de tempo", async function() {
-      // Use range amplo para capturar OIRs inseridas no before
+    it("Should return 2 OIRs that overlap in time", async function() {
+      // Use wide range to capture OIRs inserted in before
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4multiquery"),
         0, 1000,
-        0, 9999999999999  // Range amplo
+        0, 9999999999999  // Wide range
       );
 
       expect(result.ids.length).to.be.at.least(1);
     });
 
-    it("Deve retornar vazio com filtro muito específico", async function() {
+    it("Should return empty with very specific filter", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4multiquery"),
-        500, 600,  // Altura que nenhuma OIR atinge
+        500, 600,  // Altitude that no OIR reaches
         0, 9999999999999
       );
 
       expect(result.ids.length).to.equal(0);
     });
 
-    it("Deve retornar vazio para geohash nunca usado", async function() {
+    it("Should return empty for never-used geohash", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4neverused"),
         0, 10000,
@@ -836,9 +836,9 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("13. Colaboração Multi-Usuário (Novo Comportamento)", function() {
+  describe("13. Multi-User Collaboration (New Behavior)", function() {
     before(async function() {
-      // User1 cria uma OIR
+      // User1 creates an OIR
       const now = nowMs();
       const tx = await dssStorage.connect(user1).upsertOIR(
         [toBytes32("u4collab")],
@@ -848,10 +848,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
         90, toBytes32("id-60001")
       );
       await tx.wait();
-      console.log("   ✅ User1 criou OIR 60001");
+      console.log("   ✅ User1 created OIR 60001");
     });
 
-    it("Owner PODE modificar OIR criada por User1 (qualquer allowedUser pode modificar)", async function() {
+    it("Owner CAN modify OIR created by User1 (any allowedUser can modify)", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4collab")],
@@ -866,7 +866,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal("https://example.com/owner-modified");
     });
 
-    it("User2 PODE modificar OIR criada por User1 (colaboração completa)", async function() {
+    it("User2 CAN modify OIR created by User1 (full collaboration)", async function() {
       const now = nowMs();
       const tx = await dssStorage.connect(user2).upsertOIR(
         [toBytes32("u4collab")],
@@ -881,7 +881,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal("https://example.com/user2-modified");
     });
 
-    it("Owner PODE deletar OIR criada por User1 (qualquer allowedUser pode deletar)", async function() {
+    it("Owner CAN delete OIR created by User1 (any allowedUser can delete)", async function() {
       const tx = await dssStorage.deleteOIR([toBytes32("id-60001")]);
       await tx.wait();
 
@@ -889,8 +889,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids.length).to.equal(0);
     });
 
-    it("User1 removido de allowedUsers NÃO deve poder criar novas OIRs", async function() {
-      // Owner remove User1
+    it("User1 removed from allowedUsers should NOT be able to create new OIRs", async function() {
+      // Owner removes User1
       const txRemove = await dssStorage.disallowUser(user1Address);
       await txRemove.wait();
 
@@ -912,12 +912,12 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       }
       expect(reverted).to.be.true;
 
-      // Adicionar User1 de volta para não quebrar testes seguintes
+      // Add User1 back to not break following tests
       await dssStorage.allowUser(user1Address);
     });
 
-    it("Novo contract owner PODE modificar qualquer OIR (mesmo as antigas)", async function() {
-      // Owner cria uma OIR
+    it("New contract owner CAN modify any OIR (even old ones)", async function() {
+      // Owner creates an OIR
       const now = nowMs();
       const txCreate = await dssStorage.upsertOIR(
         [toBytes32("u4oldowner")],
@@ -928,11 +928,11 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await txCreate.wait();
 
-      // Transfer ownership para User1
+      // Transfer ownership to User1
       const txTransfer = await dssStorage.changeOwner(user1Address);
       await txTransfer.wait();
 
-      // Novo owner (User1) modifica OIR do owner antigo (permitido!)
+      // New owner (User1) modifies old owner's OIR (allowed!)
       const tx = await dssStorage.connect(user1).upsertOIR(
         [toBytes32("u4oldowner")],
         150, 550,
@@ -945,14 +945,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       const result = await dssStorage.getOIRsByGeohash(toBytes32("u4oldowner"), 0, 10000, 0, 9999999999999);
       expect(result.urls[0]).to.equal("https://example.com/new-owner-modified");
 
-      // Restaurar ownership original
+      // Restore original ownership
       const txRestore = await dssStorage.connect(user1).changeOwner(ownerAddress);
       await txRestore.wait();
     });
   });
 
-  describe("14. Eventos e Auditoria", function() {
-    it("DataAdded deve emitir com parâmetros corretos (createdBy)", async function() {
+  describe("14. Events and Auditing", function() {
+    it("DataAdded should emit with correct parameters (createdBy)", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4event001")],
@@ -969,11 +969,11 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       const event = events?.[0];
       expect(event?.args?.id).to.equal(toBytes32("id-80001"));
       expect(event?.args?.geohash).to.equal(toBytes32("u4event001"));
-      // Evento usa o 3º parâmetro (createdBy no contrato)
+      // Event uses 3rd parameter (createdBy in contract)
       expect(event?.args?.[2]).to.equal(ownerAddress);
     });
 
-    it("DataUpdated deve emitir ao atualizar OIR existente", async function() {
+    it("DataUpdated should emit when updating existing OIR", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4event001")],
@@ -988,8 +988,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(events?.length).to.be.at.least(1);
     });
 
-    it("DataDeleted deve emitir para cada geohash removido", async function() {
-      // Criar OIR com 2 geohashes
+    it("DataDeleted should emit for each removed geohash", async function() {
+      // Create OIR with 2 geohashes
       const now = nowMs();
       const txCreate = await dssStorage.upsertOIR(
         [toBytes32("u4event002"), toBytes32("u4event003")],
@@ -1000,16 +1000,16 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await txCreate.wait();
 
-      // Deletar
+      // Delete
       const txDelete = await dssStorage.deleteOIR([toBytes32("id-80002")]);
       const receipt = await txDelete.wait();
 
       const events = receipt.events?.filter((e: Event) => e.event === "DataDeleted");
-      expect(events?.length).to.equal(2);  // Um evento por geohash
+      expect(events?.length).to.equal(2);  // One event per geohash
     });
 
-    it("Update que remove geohashes deve emitir DataDeleted", async function() {
-      // Criar com 3 geohashes
+    it("Update that removes geohashes should emit DataDeleted", async function() {
+      // Create with 3 geohashes
       const now = nowMs();
       const txCreate = await dssStorage.upsertOIR(
         [toBytes32("u4event004"), toBytes32("u4event005"), toBytes32("u4event006")],
@@ -1020,7 +1020,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await txCreate.wait();
 
-      // Update removendo 2 geohashes
+      // Update removing 2 geohashes
       const txUpdate = await dssStorage.upsertOIR(
         [toBytes32("u4event004")],
         100, 500,
@@ -1031,18 +1031,18 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       const receipt = await txUpdate.wait();
 
       const deletedEvents = receipt.events?.filter((e: Event) => e.event === "DataDeleted");
-      expect(deletedEvents?.length).to.equal(2);  // Removeu 2 geohashes
+      expect(deletedEvents?.length).to.equal(2);  // Removed 2 geohashes
     });
   });
 
-  describe("15. Validações de Input e Limites", function() {
-    it("Deve aceitar URL vazia (sem rejeitar)", async function() {
+  describe("15. Input Validations and Limits", function() {
+    it("Should accept empty URL (without rejecting)", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4emptyurl")],
         100, 500,
         now, now + 3600000,
-        "",  // URL vazia
+        "",  // Empty URL
         110, toBytes32("id-90001")
       );
       await tx.wait();
@@ -1051,7 +1051,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal("");
     });
 
-    it("Deve aceitar entityNumber = 0", async function() {
+    it("Should accept entityNumber = 0", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4entity0")],
@@ -1067,7 +1067,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.entityNumbers[0]).to.equal(0);
     });
 
-    it("Deve lidar com altura [0, 0] (intervalo zero é inválido)", async function() {
+    it("Should handle altitude [0, 0] (zero interval is invalid)", async function() {
       let reverted = false;
       try {
         const now = nowMs();
@@ -1084,11 +1084,11 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
         reverted = err.message.includes("Invalid height interval") || 
                    err.message.includes("revert");
       }
-      // Altura [0, 0] deveria ser ACEITA (min <= max)
+      // Altitude [0, 0] should be ACCEPTED (min <= max)
       expect(reverted).to.be.false;
     });
 
-    it("Deve lidar com 20 geohashes em uma única OIR", async function() {
+    it("Should handle 20 geohashes in a single OIR", async function() {
       this.timeout(30000);
       
       const manyGeohashes = [];
@@ -1106,9 +1106,9 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       const receipt = await tx.wait();
 
-      console.log(`   ⛽ Gas para 20 geohashes: ${receipt.gasUsed.toString()}`);
+      console.log(`   ⛽ Gas for 20 geohashes: ${receipt.gasUsed.toString()}`);
 
-      // Verificar que está em alguns geohashes
+      // Verify it's in some geohashes
       const result0 = await dssStorage.getOIRsByGeohash(manyGeohashes[0], 0, 10000, 0, 9999999999999);
       const result19 = await dssStorage.getOIRsByGeohash(manyGeohashes[19], 0, 10000, 0, 9999999999999);
 
@@ -1117,10 +1117,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("16. State Consistency - Ciclo Completo", function() {
+  describe("16. State Consistency - Complete Cycle", function() {
     const cycleId = toBytes32("id-95001");
 
-    it("Passo 1: Criar OIR", async function() {
+    it("Step 1: Create OIR", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4cycle01"), toBytes32("u4cycle02")],
@@ -1132,7 +1132,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx.wait();
     });
 
-    it("Passo 2: Atualizar dados (mesmos geohashes)", async function() {
+    it("Step 2: Update data (same geohashes)", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4cycle01"), toBytes32("u4cycle02")],
@@ -1147,10 +1147,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.urls[0]).to.equal("https://example.com/cycle-update");
     });
 
-    it("Passo 3: Atualizar com mudança de geohashes", async function() {
+    it("Step 3: Update with geohash changes", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
-        [toBytes32("u4cycle02"), toBytes32("u4cycle03")],  // Remove cycle01, mantém cycle02, adiciona cycle03
+        [toBytes32("u4cycle02"), toBytes32("u4cycle03")],  // Remove cycle01, keep cycle02, add cycle03
         200, 600,
         now, now + 7200,
         "https://example.com/cycle-geo-change",
@@ -1167,7 +1167,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(added.ids[0]).to.equal(cycleId);
     });
 
-    it("Passo 4: Deletar completamente", async function() {
+    it("Step 4: Delete completely", async function() {
       const tx = await dssStorage.deleteOIR([cycleId]);
       await tx.wait();
 
@@ -1178,7 +1178,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result3.ids.length).to.equal(0);
     });
 
-    it("Passo 5: Recriar com mesmo ID (deve funcionar)", async function() {
+    it("Step 5: Recreate with same ID (should work)", async function() {
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4cycle04")],
@@ -1195,14 +1195,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("17. Segurança - Fallback ETH Rejection", function() {
-    it("Deve rejeitar envio de ETH para o contrato (fallback)", async function() {
+  describe("17. Security - Fallback ETH Rejection", function() {
+    it("Should reject sending ETH to contract (fallback)", async function() {
       let reverted = false;
       try {
         const tx = await owner.sendTransaction({
           to: dssStorage.address,
           value: ethers.utils.parseEther("0.1"),
-          data: "0x12345678" // Chamar função inexistente (fallback)
+          data: "0x12345678" // Call non-existent function (fallback)
         });
         await tx.wait();
       } catch (error) {
@@ -1213,7 +1213,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(reverted).to.be.true;
     });
 
-    it("Deve rejeitar envio de ETH direto (receive)", async function() {
+    it("Should reject direct ETH send (receive)", async function() {
       let reverted = false;
       try {
         const tx = await owner.sendTransaction({
@@ -1230,13 +1230,13 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
     });
   });
 
-  describe("18. Edge Cases - Queries com Intervalos Mínimos", function() {
+  describe("18. Edge Cases - Queries with Minimum Intervals", function() {
     before(async function() {
       const now = nowMs();
-      // Criar OIR com valores específicos para testar edge cases
+      // Create OIR with specific values to test edge cases
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4edgequery")],
-        500, 500, // Altura igual (intervalo de um ponto)
+        500, 500, // Equal altitude (single point interval)
         now, now + 1000,
         "https://example.com/edge-interval",
         150, toBytes32("id-98001")
@@ -1244,10 +1244,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx.wait();
     });
 
-    it("Deve aceitar query com altura igual [X, X]", async function() {
+    it("Should accept query with equal altitude [X, X]", async function() {
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4edgequery"),
-        500, 500, // Mesma altura (intervalo de um ponto)
+        500, 500, // Same altitude (single point interval)
         0, 9999999999999
       );
       
@@ -1255,20 +1255,20 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(result.ids[0]).to.equal(toBytes32("id-98001"));
     });
 
-    it("Deve aceitar query com tempo quase igual [X, X+1]", async function() {
-      // Como o dado foi inserido com now (do before), pode não overlap com now (atual)
-      // Então usamos range amplo para garantir que encontra
+    it("Should accept query with almost equal time [X, X+1]", async function() {
+      // Since data was inserted with now (from before), may not overlap with current now
+      // So we use wide range to ensure it finds
       const result = await dssStorage.getOIRsByGeohash(
         toBytes32("u4edgequery"),
         0, 10000,
-        0, 9999999999999 // Range amplo
+        0, 9999999999999 // Wide range
       );
       expect(result.ids.length).to.equal(1);
     });
   });
 
-  describe("19. Auditoria - createdBy e lastUpdatedBy", function() {
-    it("Deve registrar createdBy ao criar nova OIR", async function() {
+  describe("19. Auditing - createdBy and lastUpdatedBy", function() {
+    it("Should record createdBy when creating new OIR", async function() {
       const now = nowMs();
       const tx = await dssStorage.connect(user1).upsertOIR(
         [toBytes32("u4audit001")],
@@ -1284,8 +1284,8 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       expect(oirData.lastUpdatedBy).to.equal(user1Address);
     });
 
-    it("Deve preservar createdBy e atualizar lastUpdatedBy em updates", async function() {
-      // Owner modifica OIR criada por User1
+    it("Should preserve createdBy and update lastUpdatedBy on updates", async function() {
+      // Owner modifies OIR created by User1
       const now = nowMs();
       const tx = await dssStorage.upsertOIR(
         [toBytes32("u4audit001")],
@@ -1297,14 +1297,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx.wait();
 
       const oirData = await dssStorage.idToData(toBytes32("id-96001"));
-      expect(oirData.createdBy).to.equal(user1Address); // Deve permanecer User1
-      expect(oirData.lastUpdatedBy).to.equal(ownerAddress); // Deve ser Owner agora
+      expect(oirData.createdBy).to.equal(user1Address); // Should remain User1
+      expect(oirData.lastUpdatedBy).to.equal(ownerAddress); // Should be Owner now
     });
 
-    it("Deve atualizar lastUpdatedBy para cada usuário que modifica", async function() {
+    it("Should update lastUpdatedBy for each user that modifies", async function() {
       const now = nowMs();
 
-      // User2 modifica
+      // User2 modifies
       const tx1 = await dssStorage.connect(user2).upsertOIR(
         [toBytes32("u4audit001")],
         200, 600,
@@ -1315,10 +1315,10 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx1.wait();
 
       let oirData = await dssStorage.idToData(toBytes32("id-96001"));
-      expect(oirData.createdBy).to.equal(user1Address); // Ainda User1
-      expect(oirData.lastUpdatedBy).to.equal(user2Address); // Agora User2
+      expect(oirData.createdBy).to.equal(user1Address); // Still User1
+      expect(oirData.lastUpdatedBy).to.equal(user2Address); // Now User2
 
-      // User1 (criador) modifica novamente
+      // User1 (creator) modifies again
       const tx2 = await dssStorage.connect(user1).upsertOIR(
         [toBytes32("u4audit001")],
         250, 650,
@@ -1329,14 +1329,14 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx2.wait();
 
       oirData = await dssStorage.idToData(toBytes32("id-96001"));
-      expect(oirData.createdBy).to.equal(user1Address); // Ainda User1
-      expect(oirData.lastUpdatedBy).to.equal(user1Address); // Volta para User1
+      expect(oirData.createdBy).to.equal(user1Address); // Still User1
+      expect(oirData.lastUpdatedBy).to.equal(user1Address); // Back to User1
     });
 
-    it("Deve manter createdBy mesmo após múltiplas modificações de geohashes", async function() {
+    it("Should maintain createdBy even after multiple geohash modifications", async function() {
       const now = nowMs();
 
-      // Owner modifica adicionando novos geohashes
+      // Owner modifies adding new geohashes
       const tx1 = await dssStorage.upsertOIR(
         [toBytes32("u4audit001"), toBytes32("u4audit002"), toBytes32("u4audit003")],
         100, 500,
@@ -1346,7 +1346,7 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       );
       await tx1.wait();
 
-      // User2 modifica removendo geohashes
+      // User2 modifies removing geohashes
       const tx2 = await dssStorage.connect(user2).upsertOIR(
         [toBytes32("u4audit003")],
         100, 500,
@@ -1357,30 +1357,30 @@ describe("DSS_Storage - Testes Funcionais na Rede Besu (Otimizado)", function() 
       await tx2.wait();
 
       const oirData = await dssStorage.idToData(toBytes32("id-96001"));
-      expect(oirData.createdBy).to.equal(user1Address); // Sempre User1 (criador original)
-      expect(oirData.lastUpdatedBy).to.equal(user2Address); // User2 (última modificação)
+      expect(oirData.createdBy).to.equal(user1Address); // Always User1 (original creator)
+      expect(oirData.lastUpdatedBy).to.equal(user2Address); // User2 (last modification)
     });
   });
 
   after(function() {
     console.log("\n============================================================");
-    console.log("✅ TODOS OS TESTES CONCLUÍDOS COM SUCESSO!");
+    console.log("✅ ALL TESTS COMPLETED SUCCESSFULLY!");
     console.log("============================================================");
     console.log("📊 Contract address:", dssStorage.address);
-    console.log("👥 Usuários testados:");
+    console.log("👥 Tested users:");
     console.log("  - Owner (Member1):", ownerAddress);
     console.log("  - User1 (Member2):", user1Address);
     console.log("  - User2 (Member3):", user2Address);
     console.log("============================================================");
-    console.log("📈 Cobertura de Testes:");
-    console.log("  ✅ Edge cases de upsert com mudança de geohashes");
-    console.log("  ✅ Delete e cleanup completo");
-    console.log("  ✅ Queries com múltiplas OIRs");
-    console.log("  ✅ Colaboração multi-usuário (novo modelo)");
-    console.log("  ✅ Auditoria com createdBy/lastUpdatedBy");
-    console.log("  ✅ Eventos e auditoria");
-    console.log("  ✅ Validações de input e limites");
-    console.log("  ✅ State consistency (ciclo completo)");
+    console.log("📈 Test Coverage:");
+    console.log("  ✅ Edge cases of upsert with geohash changes");
+    console.log("  ✅ Delete and complete cleanup");
+    console.log("  ✅ Queries with multiple OIRs");
+    console.log("  ✅ Multi-user collaboration (new model)");
+    console.log("  ✅ Auditing with createdBy/lastUpdatedBy");
+    console.log("  ✅ Events and auditing");
+    console.log("  ✅ Input validations and limits");
+    console.log("  ✅ State consistency (complete cycle)");
     console.log("============================================================");
   });
 });

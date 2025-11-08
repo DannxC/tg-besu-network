@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 
 async function main() {
-  console.log("🔌 Conectando à rede Besu...");
+  console.log("🔌 Connecting to Besu network...");
   
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
@@ -11,52 +11,52 @@ async function main() {
   
   const networkName = process.env.HARDHAT_NETWORK || "besu";
   
-  console.log("✅ Conectado à rede:", networkName, `(chainId: ${network.chainId})`);
-  console.log("\n📋 Informações do Deployer:");
+  console.log("✅ Connected to network:", networkName, `(chainId: ${network.chainId})`);
+  console.log("\n📋 Deployer Information:");
   console.log("  Address:", deployer.address);
   console.log("  Balance:", ethers.utils.formatEther(balance), "ETH");
 
   // ========================================
   // Deploy DSS_Storage
   // ========================================
-  console.log("\n🚀 Iniciando deploy do contrato DSS_Storage...");
+  console.log("\n🚀 Starting DSS_Storage contract deployment...");
   
   const DSS_Storage = await ethers.getContractFactory("DSS_Storage");
   const dssContract = await DSS_Storage.deploy();
   
-  console.log("⏳ Aguardando confirmação...");
+  console.log("⏳ Waiting for confirmation...");
   await dssContract.deployed();
   
   const dssReceipt = await dssContract.deployTransaction.wait();
 
-  console.log("\n✅ DSS_Storage deployado!");
+  console.log("\n✅ DSS_Storage deployed!");
   console.log("  Contract address:", dssContract.address);
   console.log("  Deployment tx:", dssContract.deployTransaction.hash);
   console.log("  Block:", dssReceipt.blockNumber);
-  console.log("  Gas usado:", dssReceipt.gasUsed.toString());
+  console.log("  Gas used:", dssReceipt.gasUsed.toString());
 
   // ========================================
   // Deploy GeohashConverter
   // ========================================
-  console.log("\n🚀 Iniciando deploy do contrato GeohashConverter...");
-  console.log("⚙️  Configurando precision = 4 (área ~124512.23 km² por geohash)");
+  console.log("\n🚀 Starting GeohashConverter contract deployment...");
+  console.log("⚙️  Setting precision = 4 (area ~124512.23 km² per geohash)");
   
   const GeohashConverter = await ethers.getContractFactory("GeohashConverter");
   const geohashContract = await GeohashConverter.deploy(4); // Precision 4
   
-  console.log("⏳ Aguardando confirmação...");
+  console.log("⏳ Waiting for confirmation...");
   await geohashContract.deployed();
   
   const geohashReceipt = await geohashContract.deployTransaction.wait();
 
-  console.log("\n✅ GeohashConverter deployado!");
+  console.log("\n✅ GeohashConverter deployed!");
   console.log("  Contract address:", geohashContract.address);
   console.log("  Deployment tx:", geohashContract.deployTransaction.hash);
   console.log("  Block:", geohashReceipt.blockNumber);
-  console.log("  Gas usado:", geohashReceipt.gasUsed.toString());
+  console.log("  Gas used:", geohashReceipt.gasUsed.toString());
   
   // ========================================
-  // Salvar deployments
+  // Save deployments
   // ========================================
   const deploymentsDir = path.join(__dirname, "..", "deployments");
   if (!fs.existsSync(deploymentsDir)) {
@@ -93,17 +93,17 @@ async function main() {
   };
   fs.writeFileSync(geohashDeploymentFile, JSON.stringify(geohashDeploymentData, null, 2));
   
-  console.log("\n📝 Deployment info salvo em:");
+  console.log("\n📝 Deployment info saved to:");
   console.log("  - DSS_Storage:", dssDeploymentFile);
   console.log("  - GeohashConverter:", geohashDeploymentFile);
   
-  console.log("\n💡 Resumo:");
-  console.log("  Owner inicial:", deployer.address);
+  console.log("\n💡 Summary:");
+  console.log("  Initial owner:", deployer.address);
   console.log("  DSS_Storage:", dssContract.address);
   console.log("  GeohashConverter:", geohashContract.address, "(precision: 4)");
-  console.log("\n💡 Para testar:");
+  console.log("\n💡 To test:");
   console.log("  npm run test:dss");
-  console.log("  npm run geohash:visual (testador visual interativo)");
+  console.log("  npm run dashboard (interactive visual tester)");
 }
 
 main()

@@ -41,3 +41,7 @@ bootnodes=["enode://8208a3f344695d44e9cf2c023683cbea7b9343e2f70a5e804bd2c93858e9
 # static nodes
 static-nodes-file="/config/static-nodes.json"
 discovery-enabled=true
+
+# Transaction Pool - Configurado para stress test
+tx-pool-max-size=10000
+tx-pool-retention-hours=48
