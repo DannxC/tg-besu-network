@@ -10,6 +10,7 @@
     "scenario": "hardhat run scripts/integration-scenario.ts --network besu",
     "scripts:4": "hardhat run scripts/4_initial_data.ts --network besu",
     "scripts:5": "hardhat run scripts/5_get_data_script.ts --network besu",
+    "scripts:6": "hardhat run scripts/6_event_listener.ts --network besu",
     "dashboard": "npx hardhat run dashboard/server.ts --network besu",
     "dashboard:kill": "lsof -ti:3001 | xargs kill -9 2>/dev/null || true",
     "dashboard:restart": "npm run dashboard:kill && sleep 1 && npm run dashboard",
