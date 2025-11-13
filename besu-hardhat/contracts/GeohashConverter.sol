@@ -767,23 +767,6 @@ contract GeohashConverter {
         labelEquivalencyList = new uint256[](0);    // resetar o array de equivalencias
     }
 
-
-    function processPolygon(
-        int256[] memory latitudes, 
-        int256[] memory longitudes, 
-        uint8 precision
-    ) external returns ( bytes32[] memory result ) {
-        // (1) Bounding box (+1 tile margin)
-        BoundingBox memory bbox = computeBoundingBox(lat, lon, precision);
-        // (2) Rasterize every edge (red outline)
-        rasterizeEdges(lat, lon, precision);
-        // (3) Fill interior via labelling + parity (red area)
-        fillPolygon(lat, lon, precision, bbox);
-        // (4) Return unique geohashes ready for UPSERT
-        return comprehensiveGeohashes;
-    }
-
-
     // Main function to process the polygon and return all encompassing geohashes
     // obs: latitudes and longitudes should be given in degrees and with the DECIMALS_FACTOR already applied
     function processPolygon(int256[] memory latitudes, int256[] memory longitudes, uint8 precision, bool debug) 
