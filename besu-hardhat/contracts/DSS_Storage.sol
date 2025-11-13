@@ -423,7 +423,11 @@ contract DSS_Storage {
         uint16 _maxHeight, 
         uint64 _startTime, 
         uint64 _endTime
-    ) public view returns (string[] memory urls, uint16[] memory entityNumbers, bytes32[] memory ids) {
+    ) public view returns (
+        string[] memory urls, 
+        uint16[] memory entityNumbers, 
+        bytes32[] memory ids
+    ) {
         require(_maxHeight >= _minHeight, "Invalid height interval");
         require(_startTime < _endTime, "Invalid time interval");
 
